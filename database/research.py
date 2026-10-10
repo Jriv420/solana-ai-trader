@@ -80,7 +80,7 @@ class Research:
         for r in rows:distinct.setdefault(r['mint'],dict(r))
         data=list(distinct.values());n=len(data)
         returns=[r['return_pct'] for r in data];dips=sum(r['drawdown_pct']<=-30 for r in data)
-        return {'status':'learning' if n<10 else 'observed_pattern','horizon':horizon,'distinct_coins':n,'median_return_pct':round(median(returns),2) if n else None,'positive_outcome_pct':round(100*sum(x>0 for x in returns)/n,1) if n else None,'sharp_dip_pct':round(100*dips/n,1) if n else None,'risk_adjustment':round(10*dips/n,1) if n>=10 else 0,'scope':'Forward observed prices; no trade fees/slippage, no causal endorsement claim.'}
+        return {'status':'learning' if n<10 else 'observed_pattern','horizon':horizon,'distinct_coins':n,'median_return_pct':round(median(returns),2) if n else None,'positive_outcome_pct':round(100*sum(x>0 for x in returns)/n,1) if n else None,'sharp_dip_pct':round(100*dips/n,1) if n else None,'gain_50pct_frequency':round(100*sum(r['peak_pct']>=50 for r in data)/n,1) if n else None,'loss_50pct_frequency':round(100*sum(r['return_pct']<=-50 for r in data)/n,1) if n else None,'risk_adjustment':round(10*dips/n,1) if n>=10 else 0,'scope':'Forward observed prices; no trade fees/slippage, no causal endorsement claim. Missing prices are not treated as coin death.'}
     def detail(self,mint):
         from intelligence.narrative import context
         result=context(mint)
