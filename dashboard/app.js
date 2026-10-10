@@ -78,7 +78,7 @@ function tokenCard(item, history=false) {
     <div class="coin-top"><div class="coin-heading"><div class="coin-avatar">${image ? `<img src="${escapeHtml(image)}" alt="" loading="lazy" referrerpolicy="no-referrer">`:escapeHtml(symbol.slice(0,1))}</div>
     <div class="coin-identity"><div class="coin-title"><h3>$${escapeHtml(symbol)}</h3>${t.mint ? `<button class="copy-ca" data-copy-ca="${escapeHtml(t.mint)}" aria-label="Copy contract address for ${escapeHtml(symbol)}">Copy CA</button>`:''}</div><p class="coin-name">${escapeHtml(t.name)}</p></div></div>
     <div class="metrics"><div><small>Bot score</small><strong title="Bot setup score out of 100">${score == null ? '—':Math.round(score)+'/100'}</strong></div><div><small>${t.market_cap_is_fdv ? 'FDV':'Market cap'}</small><strong title="${money(t.market_cap_usd)}">${compactMoney(t.market_cap_usd)}</strong></div><div><small>Volume · ${volumeWindow}</small><strong title="${money(volume)}">${compactMoney(volume)}</strong></div></div></div>
-    <div class="coin-bottom"><span class="status-chip">${prettyStatus}${score == null ? ' · Unscored':''}</span><button data-mint="${escapeHtml(t.mint)}">Watch history ↗</button></div>
+    <div class="coin-bottom"><span class="status-chip">${prettyStatus}${score == null ? ' · Unscored':''}${t.identity_check?.status==='ambiguous' ? ' · Lookalike warning':''}</span><button data-mint="${escapeHtml(t.mint)}">Watch history ↗</button></div>
     <details class="coin-detail" data-wallet-mint="${escapeHtml(t.mint)}" data-price="${Number(t.price_usd || 0)}" ${openDetails.has(t.mint) ? 'open':''}><summary>Coin details &amp; signals</summary>
     <p>Liquidity: ${money(t.liquidity_usd)} · ${escapeHtml(elapsed)} ${created ? 'since launch':'pair age'}</p>
     <p class="${change == null ? 'muted':Number(change)>=0 ? 'positive':'negative'}">5m change: ${change == null ? '—':(Number(change)>=0 ? '+':'')+Number(change).toFixed(1)+'%'}</p>
@@ -93,6 +93,7 @@ function tokenCard(item, history=false) {
     <p>Setup: ${escapeHtml(t.setup_type || 'Awaiting evaluation')} · Wallet: ${escapeHtml(item.wallet?.status || t.wallet_context?.status || 'unknown')}</p>
     ${researchSummary(t.research)}<button data-research-mint="${escapeHtml(t.mint)}">Research &amp; label narrative</button>
     <div class="tracked-wallets">${trackedWalletSection(t.mint,Number(t.price_usd || 0))}</div>
+    ${t.identity_check?.status==='ambiguous' ? `<p class="negative">${escapeHtml(t.identity_check.message)} Paper entry blocked for ambiguous branding.</p><p class="mint">Other matching contracts:<br>${t.identity_check.matching_contracts.map(escapeHtml).join('<br>')}</p>`:''}
     <p class="mint">${escapeHtml(t.mint)}</p></details>
   </article>`;
 }

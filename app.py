@@ -22,6 +22,7 @@ from intelligence.decision_engine import evaluate_fast, CONNECTIONS, provider_re
 from intelligence.wallet_ai import score_wallet_context
 from intelligence.social_ai import score_social_context
 from intelligence.risk_ai import score_contextual_risk
+from intelligence.token_identity import annotate as annotate_identity
 from strategy.token_filter import evaluate_token
 from strategy.entry import should_enter
 from strategy.exit import should_exit
@@ -63,7 +64,7 @@ async def analyze(t):
 async def loop():
     while True:
         try:
-            ts=await scan_tokens()
+            ts=annotate_identity(await scan_tokens(),[x['token'] for x in store.watch_history(limit=2000)])
             sol_price=await get_sol_price()
             for token in ts:token["sol_price_usd"]=sol_price
             by={t['mint']:t for t in ts}
@@ -108,7 +109,10 @@ async def opps():return STATE["opportunities"]
 @app.get("/api/trades")
 async def trades():return store.all()
 @app.get("/api/new-pairs")
-async def new_pairs():return {"feed":dict(FEED),"items":store.new_pairs()}
+async def new_pairs():
+    items=store.new_pairs()
+    checked={t['mint']:t for t in annotate_identity([x['token'] for x in items],[x['token'] for x in store.watch_history(limit=2000)])}
+    return {"feed":dict(FEED),"items":[dict(x,token=checked[x['token']['mint']]) for x in items]}
 @app.get("/api/watch-history")
 async def watch_history(mint: str | None = None):return store.watch_history(mint=mint)
 class WalletInput(BaseModel):
