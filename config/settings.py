@@ -41,6 +41,11 @@ class Settings:
     jev_api_key: str=os.getenv("JEV_API_KEY","")
     jev_endpoint: str=os.getenv("JEV_ENDPOINT","")
     jev_timeout_ms: int=_i("JEV_TIMEOUT_MS",10000)
+    openai_api_key: str=os.getenv("OPENAI_API_KEY","")
+    openai_endpoint: str="https://api.openai.com/v1/responses"
+    openai_model: str=os.getenv("OPENAI_MODEL","gpt-5.6-terra")
+    openai_timeout_ms: int=_i("OPENAI_TIMEOUT_MS",15000)
+    openai_daily_request_limit: int=_i("OPENAI_DAILY_REQUEST_LIMIT",10)
     laya_api_key: str=os.getenv("LAYA_API_KEY","")
     laya_endpoint: str=os.getenv("LAYA_ENDPOINT","")
     laya_timeout_ms: int=_i("LAYA_TIMEOUT_MS",1200)

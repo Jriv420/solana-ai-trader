@@ -91,3 +91,13 @@ For durable memory attach a Railway volume at /data. The database automatically 
 New paper fills use token quantities and current SOL/USD. Defaults estimate 1% proportional fees and 1% slippage per side; set PAPER_FEE_BPS and PAPER_SLIPPAGE_BPS to change these assumptions. They do not model actual route quotes, network/priority fees, liquidity impact or missed fills. Existing legacy trades retain their old accounting and are counted separately. Entries need positive finite token/SOL prices and sufficient available balance. Daily realized loss resets at UTC midnight; lifetime PnL stays separate.
 
 Exits use fresh prices, persistent trailing peaks, STOP_LOSS_PCT=20, TAKE_PROFIT_PCT=50, TRAILING_STOP_PCT=20 and PAPER_MAX_HOLD_MINUTES=1440 by default. Zero disables trailing or max-hold exits. Missing/stale prices wait rather than fabricate a fill. Paper performance is simulated; live execution remains disabled.
+
+## Optional OpenAI review
+
+Create a project key at https://platform.openai.com/api-keys and save it privately as `OPENAI_API_KEY` in Railway service Variables. Never put keys in GitHub, dashboard code or chat. Apply the variable changes, then use AI Agents → Test AI connections. API usage is billed separately from ChatGPT subscriptions.
+
+Default `OPENAI_MODEL=gpt-5.6-terra` uses the Responses API with strict structured output, low reasoning effort, at most 1,000 output tokens, at most 12,000 bytes of evidence, no browsing/trading tools, and `store=false`. OpenAI sees supplied token, wallet and research evidence, not this ChatGPT conversation. This is inference with stored research context, not model retraining.
+
+The optional second opinion runs after a baseline score of at least 60, behind the existing qualified-wallet gate. Its score can only lower the baseline. Independent security/risk/position gates remain enforced. A valid review is reused for 15 minutes per coin; cached results are bounded to 1,000 coins. Failures leave the baseline provider/rules working.
+
+`OPENAI_DAILY_REQUEST_LIMIT=10` reserves attempts in SQLite before sending, including failed calls and manual tests, resetting at UTC midnight. The quota survives restart when DB_PATH is on the Railway volume. `0` disables requests. This is a request cap, not a dollar budget; token/model pricing and other applications using your key affect billing. HTTP 429/503 puts requests on cooldown, without automatic retry. Keep one Railway replica for this SQLite app. AI Agents shows model, today’s attempts, limit and connection status, without exposing credentials.
