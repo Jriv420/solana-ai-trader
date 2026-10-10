@@ -76,7 +76,7 @@ function tokenCard(item, history=false) {
   const prettyStatus={awaiting_data:'Indexing',watch:'Watching',candidate:'Candidate',rejected:'Filtered'}[item.status] || 'Indexing';
   return `<article class="coin-card">
     <div class="coin-top"><div class="coin-heading"><div class="coin-avatar">${image ? `<img src="${escapeHtml(image)}" alt="" loading="lazy" referrerpolicy="no-referrer">`:escapeHtml(symbol.slice(0,1))}</div>
-    <div class="coin-identity"><h3>$${escapeHtml(symbol)}</h3><p class="coin-name">${escapeHtml(t.name)}</p></div></div>
+    <div class="coin-identity"><div class="coin-title"><h3>$${escapeHtml(symbol)}</h3>${t.mint ? `<button class="copy-ca" data-copy-ca="${escapeHtml(t.mint)}" aria-label="Copy contract address for ${escapeHtml(symbol)}">Copy CA</button>`:''}</div><p class="coin-name">${escapeHtml(t.name)}</p></div></div>
     <div class="metrics"><div><small>Bot score</small><strong title="Bot setup score out of 100">${score == null ? '—':Math.round(score)+'/100'}</strong></div><div><small>${t.market_cap_is_fdv ? 'FDV':'Market cap'}</small><strong title="${money(t.market_cap_usd)}">${compactMoney(t.market_cap_usd)}</strong></div><div><small>Volume · ${volumeWindow}</small><strong title="${money(volume)}">${compactMoney(volume)}</strong></div></div></div>
     <div class="coin-bottom"><span class="status-chip">${prettyStatus}${score == null ? ' · Unscored':''}</span><button data-mint="${escapeHtml(t.mint)}">Watch history ↗</button></div>
     <details class="coin-detail" data-wallet-mint="${escapeHtml(t.mint)}" data-price="${Number(t.price_usd || 0)}" ${openDetails.has(t.mint) ? 'open':''}><summary>Coin details &amp; signals</summary>
@@ -143,6 +143,19 @@ function render() {
 }
 document.querySelectorAll('nav button').forEach(button => button.addEventListener('click',()=>{currentPage=button.dataset.v;selectedMint=null;tokenSort='default';render();}));
 document.getElementById('content').addEventListener('click',async event=>{
+  const copyButton=event.target.closest('button[data-copy-ca]');
+  if(copyButton) {
+    const mint=copyButton.dataset.copyCa;
+    try {
+      await navigator.clipboard.writeText(mint);
+      copyButton.textContent='Copied!';
+      copyButton.setAttribute('aria-label','Contract address copied');
+      setTimeout(()=>{if(copyButton.isConnected){copyButton.textContent='Copy CA';copyButton.setAttribute('aria-label','Copy contract address');}},2000);
+    } catch(e) {
+      window.prompt('Copy this contract address:',mint);
+    }
+    return;
+  }
   if(event.target.id==='test-connections') {event.target.disabled=true;event.target.textContent='Testing…';try {connectionData=await walletWrite('/api/connections/check','POST');render();}catch(e) {refreshError=e.message;render();}return;}
   const researchButton=event.target.closest('button[data-research-mint]');
   if(researchButton) {researchMint=researchButton.dataset.researchMint;researchData=null;document.getElementById('research-mint').value=researchMint;currentPage='research';render();try {researchData=await getData('/api/research/'+encodeURIComponent(researchMint));render();}catch(e) {refreshError=e.message;render();}return;}
