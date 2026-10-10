@@ -28,6 +28,10 @@ def request_body(state):
               'A token receipt is not a purchase, verified identity or endorsement. '
               'Missing security/bundle evidence remains unknown. Wealth alone is not trading skill. '
               'Consider realized wallet results, data freshness, narrative provenance, gains and drawdowns. '
+              'A $4k-$10k low-volume market cap can be an uncertain early setup; low cap alone proves neither failure nor opportunity. '
+              'Compare supplied cap/volume cohorts, relative turnover and 5m/1h/24h outcomes. '
+              'Traction can lead to rapid gains or losses; high volume may be artificial. '
+              'Holder concentration and bundle clues can increase downside risk but are not verified causes of coin death. '
               'Score evidence quality 0-100, not profit probability. Give a short reason. '
               'You cannot override independent risk gates. For connection_test return score 50.'),
             'input':evidence,'text':{'format':{'type':'json_schema','name':'setup_review','strict':True,

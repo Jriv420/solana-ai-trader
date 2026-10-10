@@ -7,6 +7,7 @@ def score_contextual_risk(t):
     features=research.get('features') or {}
     if features.get('narrative')=='speculative':r+=10
     if features.get('bundle_indicator'):r+=10
+    if features.get('holder_concentration')=='provider_indicator':r+=10
     if features.get('large_received_transfer') and features.get('narrative')=='speculative':r+=5
     r+=float((research.get('learning') or {}).get('risk_adjustment') or 0)
-    return {"score":round(max(0,min(100,r)),1),"reason":"liquidity + flow + volatility + evidence-aware narrative risk"}
+    return {"score":round(max(0,min(100,r)),1),"reason":"liquidity + flow + volatility + narrative + holder concentration + observed cohort risk"}

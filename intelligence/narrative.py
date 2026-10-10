@@ -3,6 +3,8 @@ from collections import defaultdict
 from decimal import Decimal
 from database.research import research
 from intelligence.wallet_learning import normalize_transaction
+from intelligence.market_regime import market_features
+from database.store import store
 
 
 def record_transaction(item,address):
@@ -30,7 +32,7 @@ def record_transaction(item,address):
 
 
 
-def context(mint):
+def context(mint,token=None):
     claims=research.claims(mint);events=research.events(mint);security=research.security(mint)
     # Latest review per wallet; other wallets' claims must not overwrite this one.
     latest={}
@@ -52,5 +54,10 @@ def context(mint):
     if (security.get('graph_insiders_detected') or 0)>0:provider_flags.append({'name':'Provider insider graph indicator','description':'RugCheck reports potential insider links; identity and coordination remain unverified.'})
     bundle={'status':'indicators_found' if clusters or provider_flags else 'not_detected_in_sample' if events or security.get('status')=='ok' else 'unknown','same_slot_buyer_groups':clusters[:10],'provider_flags':provider_flags,'scope':'Partial wallet history and provider flags; coordinated timing is not proof of a Jito bundle or common ownership.'}
     features={'security_status':security.get('status','pending'),'identity_status':','.join(sorted({c.get('identity','unknown') for c in reviews})) or 'unknown','endorsement_status':','.join(sorted({c.get('endorsement','unknown') for c in reviews})) or 'unknown','narrative':'speculative' if speculative else 'reviewed_confirmed' if reviews else 'unknown','acquisition':'transfer_and_buy' if received and bought else 'received_transfer' if received else 'buy' if bought else 'unknown','large_received_transfer':large,'bundle_indicator':bool(clusters or provider_flags),'rug_danger':bool(security.get('danger'))}
+    if token is None:
+        observations=store.watch_history(mint=mint,limit=1)
+        token=observations[0]['token'] if observations else None
+    if token is not None:features.update(market_features(token,security),bundle_status=bundle['status'])
     learning=research.learning(features)
-    return {'claims':reviews,'events':events[:30],'security':security,'bundle':bundle,'features':features,'learning':learning,'message':'User-reviewed source claims, not automatically authenticated endorsements. Token receipts may be unsolicited gifts or other transfers.'}
+    outcomes_by_horizon={h:research.learning(features,h) for h in ('5m','1h','24h')}
+    return {'claims':reviews,'events':events[:30],'security':security,'bundle':bundle,'features':features,'learning':learning,'outcomes_by_horizon':outcomes_by_horizon,'message':'User-reviewed source claims, not automatically authenticated endorsements. Token receipts may be unsolicited gifts or other transfers.'}

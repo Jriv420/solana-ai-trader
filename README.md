@@ -115,3 +115,9 @@ At most one new Gemini attempt per minute, with a default app cap of 100 per UTC
 ## Lookalike contracts
 
 The bot compares normalized names and tickers across the current scan and up to 2,000 retained observed tokens. Different contract addresses sharing both are labeled ambiguous and blocked from new paper entries before AI scoring. Repeated listings of the same mint are evaluated once. New Pairs and evaluated coin cards display a warning with other matching contract addresses. This does not establish which contract is original, scan the entire market, or catch image-only copies, different branding, or all Unicode lookalikes. Existing positions still follow normal exit rules. No match observed is not an authenticity or safety approval.
+
+## Market cohorts and downside learning
+
+Fresh observed coins, including filtered setups, start forward outcome cases grouped by initial market cap (under $4k, $4k–$10k, $10k–$100k, $100k–$1m, $1m+), 5m absolute volume, turnover relative to cap, and evidence features. FDV is kept separate from market cap. Summaries at 5m/1h/24h report distinct coins, observed +50% peaks and ending losses of 50% or more. Missing or stale prices remain missing, not coin death; sparse sampling can miss peaks and rapid crashes. These are observed associations without fees, not causal evidence or model retraining.
+
+Both Jev and the optional second-opinion adapter consider these summaries. Provider concentration warnings add 10 risk points, alongside existing bundle/narrative risk. Liquidity and security hard gates are unchanged; the default $10k liquidity minimum can exclude tiny caps from paper buys while still observing their outcomes. New cohort risk adjustment still requires 10 distinct coins with matching features.
