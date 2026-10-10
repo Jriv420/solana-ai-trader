@@ -85,6 +85,7 @@ function tokenCard(item, history=false) {
     <p class="${change == null ? 'muted':Number(change)>=0 ? 'positive':'negative'}">5m change: ${change == null ? '—':(Number(change)>=0 ? '+':'')+Number(change).toFixed(1)+'%'}</p>
     <p>${escapeHtml(fast.provider==='deterministic-fallback' ? 'Rule-based scoring':fast.provider || (item.status==='rejected' ? 'Filtered before scoring':'Awaiting market data'))}</p>
     ${(fast.gemini_review || fast.openai_review) ? `<p>AI second opinion (${escapeHtml((fast.gemini_review || fast.openai_review).provider)}): ${escapeHtml((fast.gemini_review || fast.openai_review).raw?.review?.reason || 'Review recorded')} · score ${Number((fast.gemini_review || fast.openai_review).score)}/100</p>`:''}
+    ${item.entry?.paper_exception?.allowed ? `<p>AI paper exception · ${escapeHtml(item.entry.paper_exception.model)} · waived: ${escapeHtml(item.entry.paper_exception.waived_reasons.join('; '))}</p>`:''}
     ${reasons.length ? `<p>${escapeHtml(reasons.join('; '))}</p>`:''}
     ${item.trending_score != null ? `<p>Trending score: ${item.trending_score} · Volume/MC: ${Number(item.volume_mc_ratio).toFixed(2)}×</p>`:''}
     ${t.buys_5m != null ? `<p>5m buys: ${Number(t.buys_5m)} · sells: ${Number(t.sells_5m)}</p>`:''}
@@ -129,6 +130,7 @@ function render() {
   let html = refreshError ? `<p role="status">${escapeHtml(refreshError)}</p>`:'';
   const scan=status.scan;
   if(scan && ['positions','history','agents','scan'].includes(currentPage)) html+=`<div class="card"><h2>Paper scanner</h2><p>Last completed: ${stamp(scan.finished_at)} · ${Number(scan.evaluated)} coins evaluated · ${Number(scan.evaluation_failures)} errors · ${Number(scan.paper_buys)} buys this scan</p><p>${Object.entries(scan.blockers || {}).map(([reason,count])=>`${Number(count)}: ${escapeHtml(reason)}`).join('<br>') || 'No rejection reasons in this scan.'}</p></div>`;
+  if(['agents','watch'].includes(currentPage)) {const review=status.missed_learning || {};html+=`<div class="card"><h2>Missed opportunity learning</h2><p>${escapeHtml(review.scope || 'Collecting rejection decisions and future prices.')}</p>${(review.by_reason || []).map(x=>`<p>${escapeHtml(x.reason)} · ${Number(x.distinct_coins)} coins · ${Number(x.surged_50_pct)}% rose 50% · ${Number(x.fell_30_pct)}% fell 30% · median latest ${Number(x.median_latest_change_pct)}%</p>`).join('') || '<p>Waiting for at least five minutes of follow-up prices.</p>'}${(review.surges || []).map(x=>`<p class="mint">${escapeHtml(x.mint)} · observed peak +${Number(x.peak_gain_pct)}% · latest ${Number(x.latest_change_pct)}%</p>`).join('')}</div>`;}
   if (status.error) html+=`<p role="status">Scanner error: ${escapeHtml(status.error)}</p>`;
   if (currentPage==='scan') html += feedHeader('Opportunities','Latest scan batch · Scores reflect bot signals.',sortControl())+cards(opportunities,'Waiting for a scan.');
   else if (currentPage==='new') html += feedHeader('New Pairs',`<span class="feed-dot"></span>${escapeHtml(launches.feed.status || 'connecting')} · Pump.fun launches from the past hour`,sortControl())+cards(launches.items,'Waiting for live launches. Market data appears after indexing.');

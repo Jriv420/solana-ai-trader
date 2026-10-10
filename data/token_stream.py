@@ -105,6 +105,8 @@ async def scan_tokens():
         _new_cursor += 10
     # Revisit watched coins and positions as well as fresh discoveries.
     selected += store.watched_mints(limit=10, offset=_cursor)
+    from database.missed import missed
+    selected += missed.mints()
     selected += research.mints()
     selected += list(settings.watchlist_mints) + [p['mint'] for p in store.open()]
     semaphore = asyncio.Semaphore(5)

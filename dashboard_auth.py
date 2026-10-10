@@ -54,7 +54,7 @@ def install(app,dashboard):
 
     @app.middleware('http')
     async def security(request,call_next):
-        if request.url.path=='/login':return await call_next(request)
+        if request.url.path in ('/login','/healthz'):return await call_next(request)
         password=os.getenv('NEXUS_PASSWORD')
         if not password:return Response('NEXUS password not configured',status_code=503)
         cookie_ok=valid_session(request.cookies.get(COOKIE),password);basic_ok=False
