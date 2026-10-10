@@ -121,3 +121,17 @@ The bot compares normalized names and tickers across the current scan and up to 
 Fresh observed coins, including filtered setups, start forward outcome cases grouped by initial market cap (under $4k, $4k–$10k, $10k–$100k, $100k–$1m, $1m+), 5m absolute volume, turnover relative to cap, and evidence features. FDV is kept separate from market cap. Summaries at 5m/1h/24h report distinct coins, observed +50% peaks and ending losses of 50% or more. Missing or stale prices remain missing, not coin death; sparse sampling can miss peaks and rapid crashes. These are observed associations without fees, not causal evidence or model retraining.
 
 Both Jev and the optional second-opinion adapter consider these summaries. Provider concentration warnings add 10 risk points, alongside existing bundle/narrative risk. Liquidity and security hard gates are unchanged; the default $10k liquidity minimum can exclude tiny caps from paper buys while still observing their outcomes. New cohort risk adjustment still requires 10 distinct coins with matching features.
+
+## Research-informed review and timing (2026-10-10)
+
+Jev and second opinions receive shared guidance to corroborate narrative/influencer attention with contract-specific fresh evidence and actual buying, account for manufactured volume, coordinated supply, execution delay, fees and sampling gaps, and avoid treating bundle exposure as an ability to exit before insiders. X remains optional and disconnected without its key; missing social evidence remains unknown. Cohorts now separate watched KOL mentions, none in the supplied sample, and unknown coverage.
+
+Forward cases record the first observed +50% gain and −30% loss from their initial price. Horizon summaries count only milestones within that horizon and report medians among crossing coins, not all coins. Earlier stored cases have no reconstructed timings. These measurements do not change exit thresholds or bypass security gates. No live bundle-sniping strategy or retrained model is deployed.
+
+Primary sources reviewed:
+- Pump.fun official fees (updated 2026-10-08): https://pump.fun/docs/fees — 1.25% bonding-curve fee; PumpSwap fees vary by pool and tier. The app’s configurable proportional fee/slippage model is an estimate, not a route-specific quote.
+- MELT (formerly MemeTrans), https://arxiv.org/html/2602.13480v2 — coordinated holdings, behavioral traces and time-based splits support risk screening; historical migrated-token sample is not universal profitability evidence.
+- Resisting Manipulative Bots in Memecoin Copy Trading, https://arxiv.org/abs/2601.08641 — manipulation and trade execution lag undermine naive wallet copying.
+- Hour-Aware Adaptive Risk Management, https://arxiv.org/abs/2606.08232 — exploratory paper-trading evidence with fragile results; do not transfer fitted thresholds or reported returns to this bot.
+
+No independently verified profitable Jev + Gemini pump.fun strategy was established by this review. Principles are incorporated as hypotheses and conservative guidance; the cited models/datasets have not been installed or trained here. Validate future paper results after costs and across independent coins before claiming an edge.

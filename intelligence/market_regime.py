@@ -8,6 +8,8 @@ def market_features(token,security):
     ratio=volume/cap if cap and cap>0 and volume is not None and volume>=0 else None
     risks=security.get('risks') or []
     concentrated=any(any(word in str(r.get('name','')).lower()+' '+str(r.get('description','')).lower() for word in ('large holder','top holder','concentration','single holder')) for r in risks)
-    return {'market_cap_group':cap_group,'cap_basis':'fdv' if token.get('market_cap_is_fdv') else 'market_cap',
+    social=token.get('social_context') or {}
+    attention='watched_kol_mention' if social.get('status')=='ok' and social.get('known_influencers') else 'none_in_sample' if social.get('status')=='ok' else 'unknown'
+    return {'influencer_attention':attention,'market_cap_group':cap_group,'cap_basis':'fdv' if token.get('market_cap_is_fdv') else 'market_cap',
             'volume_5m_group':volume_group,'volume_to_cap_group':'unknown' if ratio is None else 'under_5pct' if ratio<.05 else '5pct_to_25pct' if ratio<.25 else '25pct_plus',
             'holder_concentration':'provider_indicator' if concentrated else 'no_provider_indicator' if security.get('status')=='ok' else 'unknown'}

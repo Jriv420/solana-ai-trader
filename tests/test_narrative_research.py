@@ -28,6 +28,18 @@ class NarrativeResearch(unittest.TestCase):
     def tearDown(self):
         self.client.close();self.env.stop();self.patch.stop();self.tmp.cleanup()
     def token(self,price,now):return {'mint':MINT,'price_usd':price,'timestamp':now,'liquidity_usd':50000,'age_minutes':1}
+    def test_timing_crossings_are_sampled_and_horizon_bounded(self):
+        now=time.time();features={'narrative':'timing-test'}
+        for elapsed,price in ((0,100),(60,160),(120,60),(300,80)):
+            research.snapshot(self.token(price,now+elapsed),features,now+elapsed)
+        timing=research.learning(features,'5m')['timing']
+        self.assertEqual(timing['median_seconds_to_gain_50'],60)
+        self.assertEqual(timing['median_seconds_to_loss_30'],120)
+        other=dict(self.token(100,now),mint='LATER')
+        research.snapshot(other,features,now)
+        other.update(price_usd=110,timestamp=now+300);research.snapshot(other,features,now+300)
+        other.update(price_usd=160,timestamp=now+600);research.snapshot(other,features,now+600)
+        self.assertEqual(research.learning(features,'5m')['timing']['gain_50_observations'],1)
     def claim(self,**extra):
         value={'wallet':WALLET,'identity':'alleged','endorsement':'speculative','subject':'Narrative person'};value.update(extra)
         return self.client.post('/api/research/'+MINT+'/claims',json=value,auth=('nexus','test'))

@@ -21,6 +21,9 @@ class Research:
             c.execute('CREATE TABLE IF NOT EXISTS research_checks(mint TEXT PRIMARY KEY,checked_at REAL,payload_json TEXT)')
             c.execute('CREATE TABLE IF NOT EXISTS research_cases(id INTEGER PRIMARY KEY,mint TEXT,started_at REAL,baseline REAL,features_json TEXT,peak REAL,trough REAL,worst_drawdown REAL DEFAULT 0,UNIQUE(mint,features_json))')
             if 'worst_drawdown' not in {r['name'] for r in c.execute('PRAGMA table_info(research_cases)')}:c.execute('ALTER TABLE research_cases ADD COLUMN worst_drawdown REAL DEFAULT 0')
+            columns={r['name'] for r in c.execute('PRAGMA table_info(research_cases)')}
+            for field in ('first_gain_50_seconds','first_loss_30_seconds'):
+                if field not in columns:c.execute('ALTER TABLE research_cases ADD COLUMN '+field+' REAL')
             c.execute('CREATE TABLE IF NOT EXISTS research_outcomes(case_id INTEGER,horizon TEXT,measured_at REAL,return_pct REAL,peak_pct REAL,drawdown_pct REAL,PRIMARY KEY(case_id,horizon))')
             c.execute('CREATE INDEX IF NOT EXISTS research_claims_mint ON research_claims(mint,id)')
             c.execute('CREATE INDEX IF NOT EXISTS research_events_mint ON research_events(mint,event_time)')
@@ -65,6 +68,9 @@ class Research:
             for r in cases:
                 peak=max(price,r['peak']);trough=min(price,r['trough']);drawdown=min(r['worst_drawdown'],100*(price/peak-1))
                 c.execute('UPDATE research_cases SET peak=?,trough=?,worst_drawdown=? WHERE id=?',(peak,trough,drawdown,r['id']))
+                elapsed=now-r['started_at'];change=100*(price/r['baseline']-1)
+                if change>=50:c.execute('UPDATE research_cases SET first_gain_50_seconds=COALESCE(first_gain_50_seconds,?) WHERE id=?',(elapsed,r['id']))
+                if change<=-30:c.execute('UPDATE research_cases SET first_loss_30_seconds=COALESCE(first_loss_30_seconds,?) WHERE id=?',(elapsed,r['id']))
                 for label,seconds in HORIZONS.items():
                     elapsed=now-r['started_at'];tolerance=max(120,seconds*.1)
                     # Only fresh observations near the deadline; missed windows stay missing.
@@ -74,13 +80,17 @@ class Research:
             c.execute('DELETE FROM research_outcomes WHERE case_id NOT IN (SELECT id FROM research_cases)')
     def learning(self,features,horizon='1h'):
         key=json.dumps(features,sort_keys=True)
-        with store.conn() as c:rows=c.execute('SELECT c.mint,o.* FROM research_outcomes o JOIN research_cases c ON c.id=o.case_id WHERE c.features_json=? AND o.horizon=? ORDER BY c.started_at',(key,horizon)).fetchall()
+        with store.conn() as c:rows=c.execute('SELECT c.mint,c.first_gain_50_seconds,c.first_loss_30_seconds,o.* FROM research_outcomes o JOIN research_cases c ON c.id=o.case_id WHERE c.features_json=? AND o.horizon=? ORDER BY c.started_at',(key,horizon)).fetchall()
         # One earliest case per coin; repeated scans cannot inflate sample size.
         distinct={}
         for r in rows:distinct.setdefault(r['mint'],dict(r))
         data=list(distinct.values());n=len(data)
         returns=[r['return_pct'] for r in data];dips=sum(r['drawdown_pct']<=-30 for r in data)
-        return {'status':'learning' if n<10 else 'observed_pattern','horizon':horizon,'distinct_coins':n,'median_return_pct':round(median(returns),2) if n else None,'positive_outcome_pct':round(100*sum(x>0 for x in returns)/n,1) if n else None,'sharp_dip_pct':round(100*dips/n,1) if n else None,'gain_50pct_frequency':round(100*sum(r['peak_pct']>=50 for r in data)/n,1) if n else None,'loss_50pct_frequency':round(100*sum(r['return_pct']<=-50 for r in data)/n,1) if n else None,'risk_adjustment':round(10*dips/n,1) if n>=10 else 0,'scope':'Forward observed prices; no trade fees/slippage, no causal endorsement claim. Missing prices are not treated as coin death.'}
+        deadline=HORIZONS[horizon]
+        gains=[r['first_gain_50_seconds'] for r in data if r['first_gain_50_seconds'] is not None and r['first_gain_50_seconds']<=deadline]
+        losses=[r['first_loss_30_seconds'] for r in data if r['first_loss_30_seconds'] is not None and r['first_loss_30_seconds']<=deadline]
+        timing={'gain_50_observations':len(gains),'loss_30_observations':len(losses),'median_seconds_to_gain_50':round(median(gains)) if gains else None,'median_seconds_to_loss_30':round(median(losses)) if losses else None,'scope':'First observed crossing from baseline, not exact event time or executable exit; sampled observations can miss ordering.'}
+        return {'timing':timing,'status':'learning' if n<10 else 'observed_pattern','horizon':horizon,'distinct_coins':n,'median_return_pct':round(median(returns),2) if n else None,'positive_outcome_pct':round(100*sum(x>0 for x in returns)/n,1) if n else None,'sharp_dip_pct':round(100*dips/n,1) if n else None,'gain_50pct_frequency':round(100*sum(r['peak_pct']>=50 for r in data)/n,1) if n else None,'loss_50pct_frequency':round(100*sum(r['return_pct']<=-50 for r in data)/n,1) if n else None,'risk_adjustment':round(10*dips/n,1) if n>=10 else 0,'scope':'Forward observed prices; no trade fees/slippage, no causal endorsement claim. Missing prices are not treated as coin death.'}
     def detail(self,mint):
         from intelligence.narrative import context
         result=context(mint)
