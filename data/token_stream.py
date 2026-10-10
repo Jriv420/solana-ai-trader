@@ -8,6 +8,7 @@ import websockets
 from config.settings import settings
 from data.market_data import get_token_snapshot
 from database.store import store
+from database.research import research
 
 DISCOVERY_URLS = [
     'https://api.dexscreener.com/token-profiles/latest/v1',
@@ -96,6 +97,7 @@ async def scan_tokens():
         _new_cursor += 10
     # Revisit watched coins and positions as well as fresh discoveries.
     selected += store.watched_mints(limit=10, offset=_cursor)
+    selected += research.mints()
     selected += list(settings.watchlist_mints) + [p['mint'] for p in store.open()]
     semaphore = asyncio.Semaphore(5)
     async def fetch(mint):

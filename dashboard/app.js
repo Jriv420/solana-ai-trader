@@ -1,5 +1,6 @@
 const openDetails = new Set(), walletDetails = new Map(), walletLoading = new Set();
 let currentPage = 'new';
+let researchMint=null, researchData=null;
 let searchQuery = '';
 let tokenSort = 'default';
 let walletRegistry = {items:[],status:{}};
@@ -34,6 +35,7 @@ async function refreshDashboard() {
     document.getElementById('balance').textContent = Number(status.balance_sol).toFixed(3)+' SOL';
     document.getElementById('mode').textContent = status.paper_mode ? 'PAPER':'LIVE';
     document.getElementById('positions').textContent = (status.open_positions || []).length;
+    if(researchMint && currentPage==='research') researchData=await getData('/api/research/'+encodeURIComponent(researchMint));
     if (selectedMint) details = await getData('/api/watch-history?mint='+encodeURIComponent(selectedMint));
   } catch (error) { refreshError='Update failed ('+error.message+'). Displayed data may be stale.'; }
   finally { loading=false; render(); }
@@ -86,6 +88,7 @@ function tokenCard(item, history=false) {
     ${history ? `<p>First seen: ${stamp(item.first_seen)}<br>Last checked: ${stamp(item.last_seen)} · Checks: ${item.observations || 0}</p>`:''}
     ${t.timestamp ? `<p>Market data: ${stamp(t.timestamp)}</p>`:''}
     ${t.market_cap_is_fdv ? '<p>FDV shown because market cap is unavailable.</p>':''}
+    ${researchSummary(t.research)}<button data-research-mint="${escapeHtml(t.mint)}">Research &amp; label narrative</button>
     <div class="tracked-wallets">${trackedWalletSection(t.mint,Number(t.price_usd || 0))}</div>
     <p class="mint">${escapeHtml(t.mint)}</p></details>
   </article>`;
@@ -116,6 +119,7 @@ function walletRegistryView() {
 }
 function render() {
   document.getElementById('wallet-manager').hidden=currentPage!=='wallets';
+  document.getElementById('research-manager').hidden=currentPage!=='research';
   document.querySelectorAll('nav button').forEach(b => { const active=b.dataset.v===currentPage; b.classList.toggle('active',active); b.setAttribute('aria-pressed',String(active)); });
   let html = refreshError ? `<p role="status">${escapeHtml(refreshError)}</p>`:'';
   if (status.error) html+=`<p role="status">Scanner error: ${escapeHtml(status.error)}</p>`;
@@ -130,11 +134,14 @@ function render() {
   else if (currentPage==='agents') html += `<div class="card"><h2>AI Agents</h2><pre>${escapeHtml(JSON.stringify(status.agents || {},null,2))}</pre><p class="muted">Wallet and social scores currently use scaffold inputs, not verified live influencer or wallet feeds.</p></div>`;
   else if (currentPage==='routes') html += '<div class="card"><h2>Execution Routes</h2><p>Pump Direct → PumpSwap → Jupiter fallback</p><p class="muted">Live trading is not enabled.</p></div>';
   else if (currentPage==='wallets') html += walletRegistryView();
+  else if (currentPage==='research') html += researchView();
   else if (currentPage==='history') html += `<div class="card"><h2>Trade History</h2><pre>${escapeHtml(JSON.stringify(trades,null,2))}</pre></div>`;
   document.getElementById('content').innerHTML = html;
 }
 document.querySelectorAll('nav button').forEach(button => button.addEventListener('click',()=>{currentPage=button.dataset.v;selectedMint=null;tokenSort='default';render();}));
 document.getElementById('content').addEventListener('click',async event=>{
+  const researchButton=event.target.closest('button[data-research-mint]');
+  if(researchButton) {researchMint=researchButton.dataset.researchMint;researchData=null;document.getElementById('research-mint').value=researchMint;currentPage='research';render();try {researchData=await getData('/api/research/'+encodeURIComponent(researchMint));render();}catch(e) {refreshError=e.message;render();}return;}
   const remove=event.target.closest('button[data-remove-wallet]');
   if(remove) {remove.disabled=true;try {await walletWrite('/api/wallets/'+encodeURIComponent(remove.dataset.removeWallet),'DELETE');walletDetails.clear();await refreshDashboard();} catch(e) {refreshError=e.message;render();} return;}
   const button=event.target.closest('button[data-mint]');
@@ -177,4 +184,25 @@ document.getElementById('wallet-form').addEventListener('submit',async event=>{
   try {await walletWrite('/api/wallets','POST',{address:document.getElementById('wallet-address').value.trim(),label:document.getElementById('wallet-label').value.trim()});walletDetails.clear();message.textContent='Wallet added. Positions will appear in coin details.';event.target.reset();walletRegistry=await getData('/api/wallets');render();}
   catch(e) {message.textContent=e.message;}
   finally {button.disabled=false;}
+});
+
+function researchSummary(data) {
+  if(!data) return '<h4>Security &amp; narrative</h4><p class="muted">Research is pending.</p>';
+  const security=data.security || {}, learning=data.learning || {}, features=data.features || {};
+  return `<h4>Security &amp; narrative</h4><p>RugCheck: ${escapeHtml(security.status || 'pending')}${security.danger ? ' · Danger detected':''} · Narrative: ${escapeHtml(features.narrative || 'unknown')}<br>Acquisition: ${escapeHtml(features.acquisition || 'unknown')}${features.large_received_transfer ? ' · Received transfer ≥5% of supply':''}<br>Bundle indicators: ${escapeHtml(data.bundle?.status || 'unknown')}</p><p class="muted">${escapeHtml(security.message || '')}<br>Learning: ${Number(learning.distinct_coins || 0)} distinct coins · 1h median change ${learning.median_return_pct == null ? '—':Number(learning.median_return_pct).toFixed(1)+'%'} · Sharp dip frequency ${learning.sharp_dip_pct == null ? '—':learning.sharp_dip_pct+'%'}</p>`;
+}
+function researchView() {
+  const data=researchData;
+  if(!researchMint) return '<div class="card"><p>Choose “Research &amp; label narrative” in coin details, or paste a coin contract into the form above. Learning starts when fresh market data is observed.</p></div>';
+  if(!data) return '<div class="card"><p>Loading coin research…</p></div>';
+  const claims=(data.claims || []).map(c=>`<li>${escapeHtml(c.subject || c.wallet)} · Identity: ${escapeHtml(c.identity)} · Endorsement: ${escapeHtml(c.endorsement)}<br>${escapeHtml(c.wallet)}<br>${imageUrl(c.source_url) ? `<a href="${escapeHtml(imageUrl(c.source_url))}" target="_blank" rel="noopener noreferrer">Source reviewed by user</a>`:''}<br>${escapeHtml(c.note)} · ${stamp(c.recorded_at)}</li>`).join('');
+  const events=(data.events || []).map(e=>`<li>${escapeHtml(e.kind)} · ${escapeHtml(e.wallet)} · ${escapeHtml(e.quantity)} tokens${e.received_supply_pct != null ? ' · ≈'+Number(e.received_supply_pct).toFixed(2)+'% supply':''}${e.amount_approximate ? ' (approximate amount)':''}<br><a href="https://solscan.io/tx/${encodeURIComponent(e.signature)}" target="_blank" rel="noopener noreferrer">Transaction</a> · ${stamp(e.timestamp)}</li>`).join('');
+  const risks=(data.security?.risks || []).map(r=>`<li>${escapeHtml(r.level)}: ${escapeHtml(r.name)} — ${escapeHtml(r.description)}</li>`).join('');
+  const outcomes=(data.outcomes || []).filter(o=>o.horizon).map(o=>`<li>${escapeHtml(o.horizon)} · Return ${Number(o.return_pct).toFixed(1)}% · Observed peak ${Number(o.peak_pct).toFixed(1)}% · Worst observed drawdown ${Number(o.drawdown_pct).toFixed(1)}%<br>Case started ${stamp(o.started_at)}</li>`).join('');
+  return `<div class="card"><h2>Coin research</h2><p class="mint">${escapeHtml(researchMint)}</p>${researchSummary(data)}<p class="muted">${escapeHtml(data.message)}<br>${escapeHtml(data.bundle?.scope)}<br>Learned risk adjustment begins after 10 distinct coins. Missing outcomes stay missing; price snapshots can miss intraperiod moves.</p><h3>Reviewed narrative sources</h3><ul>${claims || '<li>No identity or endorsement evidence recorded.</li>'}</ul><h3>Observed transfers and buys</h3><ul>${events || '<li>No parsed wallet events observed yet. This does not mean no transfers occurred.</li>'}</ul><h3>RugCheck flags</h3><ul>${risks || '<li>No flags returned, or report unavailable. Check status above.</li>'}</ul><h3>Forward outcomes</h3><ul>${outcomes || '<li>Waiting for fresh 5m / 1h / 24h price observations.</li>'}</ul></div>`;
+}
+document.getElementById('research-form').addEventListener('submit',async event=>{
+  event.preventDefault();const button=event.target.querySelector('button'),message=document.getElementById('research-message');button.disabled=true;message.textContent='Saving…';
+  const mint=document.getElementById('research-mint').value.trim();
+  try {await walletWrite('/api/research/'+encodeURIComponent(mint)+'/claims','POST',{wallet:document.getElementById('research-wallet').value.trim(),subject:document.getElementById('research-subject').value.trim(),identity:document.getElementById('research-identity').value,endorsement:document.getElementById('research-endorsement').value,source_url:document.getElementById('research-source').value.trim(),note:document.getElementById('research-note').value.trim()});researchMint=mint;researchData=await getData('/api/research/'+encodeURIComponent(mint));message.textContent='Saved as user-reviewed evidence. Learning uses future observations.';render();}catch(e) {message.textContent=e.message;}finally {button.disabled=false;}
 });
