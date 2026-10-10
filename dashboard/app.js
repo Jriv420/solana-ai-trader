@@ -1,6 +1,7 @@
 const openDetails = new Set(), walletDetails = new Map(), walletLoading = new Set();
 let currentPage = 'new';
 let researchMint=null, researchData=null;
+let connectionData={};
 let searchQuery = '';
 let tokenSort = 'default';
 let walletRegistry = {items:[],status:{}};
@@ -29,8 +30,8 @@ async function refreshDashboard() {
   loading = true;
   try {
     const results = await Promise.all([getData('/api/status'), getData('/api/opportunities'),
-      getData('/api/trades'),getData('/api/new-pairs'), getData('/api/trending?window='+windowSize), getData('/api/watch-history'),getData('/api/wallets')]);
-    [status,opportunities,trades,launches,trending,watched,walletRegistry] = results;
+      getData('/api/trades'),getData('/api/new-pairs'), getData('/api/trending?window='+windowSize), getData('/api/watch-history'),getData('/api/wallets'),getData('/api/connections')]);
+    [status,opportunities,trades,launches,trending,watched,walletRegistry,connectionData] = results;
     refreshError = '';
     document.getElementById('balance').textContent = Number(status.balance_sol).toFixed(3)+' SOL';
     document.getElementById('mode').textContent = status.paper_mode ? 'PAPER':'LIVE';
@@ -88,6 +89,7 @@ function tokenCard(item, history=false) {
     ${history ? `<p>First seen: ${stamp(item.first_seen)}<br>Last checked: ${stamp(item.last_seen)} · Checks: ${item.observations || 0}</p>`:''}
     ${t.timestamp ? `<p>Market data: ${stamp(t.timestamp)}</p>`:''}
     ${t.market_cap_is_fdv ? '<p>FDV shown because market cap is unavailable.</p>':''}
+    <p>Setup: ${escapeHtml(t.setup_type || 'Awaiting evaluation')} · Wallet: ${escapeHtml(item.wallet?.status || t.wallet_context?.status || 'unknown')}</p>
     ${researchSummary(t.research)}<button data-research-mint="${escapeHtml(t.mint)}">Research &amp; label narrative</button>
     <div class="tracked-wallets">${trackedWalletSection(t.mint,Number(t.price_usd || 0))}</div>
     <p class="mint">${escapeHtml(t.mint)}</p></details>
@@ -131,7 +133,7 @@ function render() {
     if (selectedMint) html += `<div class="card"><button id="back-watch">All watched coins</button><h3 class="mint">${escapeHtml(selectedMint)}</h3><p class="muted">Latest checks first</p></div>`+cards(details,'No scored checks yet; this launch is awaiting indexed market data.');
     else html += cards(watched,'No coins checked yet.',true);
   } else if (currentPage==='positions') html += `<div class="card"><h2>Open Positions</h2><pre>${escapeHtml(JSON.stringify(status.open_positions || [],null,2))}</pre></div>`;
-  else if (currentPage==='agents') html += `<div class="card"><h2>AI Agents</h2><pre>${escapeHtml(JSON.stringify(status.agents || {},null,2))}</pre><p class="muted">Wallet and social scores currently use scaffold inputs, not verified live influencer or wallet feeds.</p></div>`;
+  else if (currentPage==='agents') html += connectionsView();
   else if (currentPage==='routes') html += '<div class="card"><h2>Execution Routes</h2><p>Pump Direct → PumpSwap → Jupiter fallback</p><p class="muted">Live trading is not enabled.</p></div>';
   else if (currentPage==='wallets') html += walletRegistryView();
   else if (currentPage==='research') html += researchView();
@@ -140,6 +142,7 @@ function render() {
 }
 document.querySelectorAll('nav button').forEach(button => button.addEventListener('click',()=>{currentPage=button.dataset.v;selectedMint=null;tokenSort='default';render();}));
 document.getElementById('content').addEventListener('click',async event=>{
+  if(event.target.id==='test-connections') {event.target.disabled=true;event.target.textContent='Testing…';try {connectionData=await walletWrite('/api/connections/check','POST');render();}catch(e) {refreshError=e.message;render();}return;}
   const researchButton=event.target.closest('button[data-research-mint]');
   if(researchButton) {researchMint=researchButton.dataset.researchMint;researchData=null;document.getElementById('research-mint').value=researchMint;currentPage='research';render();try {researchData=await getData('/api/research/'+encodeURIComponent(researchMint));render();}catch(e) {refreshError=e.message;render();}return;}
   const remove=event.target.closest('button[data-remove-wallet]');
@@ -206,3 +209,9 @@ document.getElementById('research-form').addEventListener('submit',async event=>
   const mint=document.getElementById('research-mint').value.trim();
   try {await walletWrite('/api/research/'+encodeURIComponent(mint)+'/claims','POST',{wallet:document.getElementById('research-wallet').value.trim(),subject:document.getElementById('research-subject').value.trim(),identity:document.getElementById('research-identity').value,endorsement:document.getElementById('research-endorsement').value,source_url:document.getElementById('research-source').value.trim(),note:document.getElementById('research-note').value.trim()});researchMint=mint;researchData=await getData('/api/research/'+encodeURIComponent(mint));message.textContent='Saved as user-reviewed evidence. Learning uses future observations.';render();}catch(e) {message.textContent=e.message;}finally {button.disabled=false;}
 });
+
+function connectionsView() {
+  const d=connectionData, models=d.models || {}, storage=d.storage || {}, metrics=status.paper_metrics || {};
+  const modelRows=Object.entries(models).map(([name,m])=>`<li>${escapeHtml(name)}: ${m.configured ? 'Configured':'Missing key or endpoint'} · ${escapeHtml(m.status)}${m.checked_at ? ' · '+stamp(m.checked_at):''}</li>`).join('');
+  return `<div class="card"><h2>Connections &amp; paper results</h2><p>Jev → Laya → Darwin for eligible setups; deterministic risk gates remain independent. Paid model calls wait for qualified wallet evidence. Darwin is reserved for stronger fallback setups.</p><ul>${modelRows}<li>Wallet RPC: ${escapeHtml(d.rpc?.status || 'unknown')}</li><li>Helius history: ${escapeHtml(d.helius?.status || 'unknown')}</li><li>X social: ${escapeHtml(d.x?.x || 'unknown')}</li><li>RugCheck: ${escapeHtml(d.rugcheck?.rugcheck || 'unknown')}</li></ul><button id="test-connections">Test AI connections</button><p class="muted">Tests send one small request to each configured model endpoint and may use provider credits. Keys are never shown. A valid score tests the adapter response, not trading quality.</p><h3>Learning storage</h3><p>${escapeHtml(storage.message)}<br>Database: <span class="mint">${escapeHtml(storage.db_path)}</span></p><h3>Paper performance</h3><p>${Number(metrics.closed_trades || 0)} closed trades · ${Number(metrics.cost_model_trades || 0)} with cost model · ${Number(metrics.legacy_trades || 0)} legacy<br>Net PnL: ${Number(metrics.net_pnl_sol || 0).toFixed(4)} SOL · Today's realized: ${Number(metrics.daily_realized_sol || 0).toFixed(4)} SOL (UTC)<br>Win rate: ${metrics.win_rate_pct == null ? '—':metrics.win_rate_pct+'%'}</p><p class="muted">Simulated fees and slippage; actual fills, liquidity impact and network costs can differ. Telegram/Discord feeds and automatic endorsement verification are not connected. Live execution remains disabled.</p></div>`;
+}

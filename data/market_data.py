@@ -3,7 +3,7 @@ DEX="https://api.dexscreener.com/latest/dex/tokens/{mint}"
 async def get_token_snapshot(mint):
     async with httpx.AsyncClient(timeout=5.0) as c:
         r=await c.get(DEX.format(mint=mint)); r.raise_for_status(); p=r.json()
-    pairs=[x for x in p.get("pairs",[]) if x.get("chainId")=="solana"]
+    pairs=[x for x in p.get("pairs",[]) if x.get("chainId")=="solana" and (x.get("baseToken") or {}).get("address")==mint]
     if not pairs:return None
     x=max(pairs,key=lambda z:float((z.get("liquidity") or {}).get("usd") or 0))
     created=x.get("pairCreatedAt")
@@ -24,3 +24,13 @@ async def get_token_snapshot(mint):
             "market_cap_is_fdv":not bool(x.get("marketCap")),
             "timestamp":time.time(),
             "dex_id":x.get("dexId") or "unknown","source":"dexscreener"}
+
+_SOL_CACHE={'price':None,'checked_at':0}
+async def get_sol_price():
+    if time.time()-_SOL_CACHE['checked_at']<60:return _SOL_CACHE['price']
+    try:
+        token=await get_token_snapshot('So11111111111111111111111111111111111111112')
+        price=token['price_usd'] if token else 0
+        if price>0:_SOL_CACHE.update(price=price,checked_at=time.time());return price
+    except (httpx.HTTPError,ValueError,KeyError,TypeError):pass
+    return None

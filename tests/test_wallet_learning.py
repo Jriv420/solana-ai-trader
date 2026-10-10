@@ -48,6 +48,8 @@ class RegistryAndDiscovery(unittest.IsolatedAsyncioTestCase):
         db.Store().ensure_observations();wallet_registry.ensure()
         from database.research import research
         research.ensure()
+        from data.social_data import ensure
+        ensure()
     async def asyncTearDown(self):self.patch.stop();self.tmp.cleanup()
     async def test_whale_is_not_marked_profitable_and_disable_persists(self):
         wallet_registry.add(A);wallet_registry.position(A,MINT,'100000',30000)

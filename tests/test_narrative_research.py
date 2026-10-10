@@ -22,10 +22,12 @@ class NarrativeResearch(unittest.TestCase):
         Store().ensure_observations();research.ensure()
         from database.wallet_registry import wallet_registry
         wallet_registry.ensure()
+        from data.social_data import ensure
+        ensure()
         self.env=patch.dict(os.environ,{'NEXUS_PASSWORD':'test'});self.env.start();self.client=TestClient(app.app)
     def tearDown(self):
         self.client.close();self.env.stop();self.patch.stop();self.tmp.cleanup()
-    def token(self,price,now):return {'mint':MINT,'price_usd':price,'timestamp':now,'liquidity_usd':50000}
+    def token(self,price,now):return {'mint':MINT,'price_usd':price,'timestamp':now,'liquidity_usd':50000,'age_minutes':1}
     def claim(self,**extra):
         value={'wallet':WALLET,'identity':'alleged','endorsement':'speculative','subject':'Narrative person'};value.update(extra)
         return self.client.post('/api/research/'+MINT+'/claims',json=value,auth=('nexus','test'))
@@ -86,7 +88,7 @@ class NarrativeResearch(unittest.TestCase):
     def test_ai_receives_point_in_time_context_and_unchecked_never_scores(self):
         import asyncio
         token=self.token(1,time.time())
-        with patch.object(app,'evaluate_fast',new=AsyncMock(return_value={'provider':'deterministic-fallback','score':50})) as model:
+        with patch.object(app,'score_wallet_context',return_value={'score':60,'status':'observed'}),patch.object(app,'evaluate_fast',new=AsyncMock(return_value={'provider':'deterministic-fallback','score':50})) as model:
             result=asyncio.run(app.analyze(token))
             self.assertEqual(result['status'],'rejected');model.assert_not_awaited()
             research.check(MINT,{'status':'ok','risks':[],'danger':False})
