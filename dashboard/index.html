@@ -1,1 +1,15 @@
-<!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Nexus</title><link rel="stylesheet" href="/static/style.css"></head><body><main class="shell"><header><div><h1>NEXUS</h1><p>Solana AI Trading System</p></div><span id="mode">PAPER</span></header><section class="stats"><div class="card"><small>PAPER BALANCE</small><h2 id="balance">-- SOL</h2></div><div class="card"><small>OPEN POSITIONS</small><h2 id="positions">0</h2></div></section><nav><button data-v="scan">Opportunities</button><button data-v="positions">Positions</button><button data-v="agents">AI Agents</button><button data-v="routes">Execution Routes</button><button data-v="history">Trade History</button></nav><section id="content"></section></main><script src="/static/app.js"></script></body></html>
+<!doctype html>
+<html lang="en">
+<head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="theme-color" content="#151719"><title>Nexus · Explore</title><link rel="stylesheet" href="/static/style.css"></head>
+<body><main class="shell">
+<header><div class="brand"><span class="brand-mark" aria-hidden="true">N</span><div><h1>NEXUS</h1><p>Solana discovery</p></div></div><span id="mode">PAPER</span></header>
+<section class="stats" aria-label="Account summary"><div><small>Paper balance</small><strong id="balance">— SOL</strong></div><div><small>Open positions</small><strong id="positions">0</strong></div><span class="refresh-note">Updates every 5s</span></section>
+<div class="explore-heading"><div><p class="eyebrow">YOUR MARKET FEED</p><h2>Explore coins</h2></div></div>
+<label class="search-box"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" aria-hidden="true"><circle cx="10.5" cy="10.5" r="6.5"/><path d="m16 16 4.5 4.5"/></svg><input id="coin-search" type="search" placeholder="Search name, ticker or contract" aria-label="Search loaded coins" autocomplete="off"></label>
+<nav aria-label="Dashboard tabs"><button data-v="new">New Pairs</button><button data-v="trending">Trending</button><button data-v="scan">Opportunities</button><button data-v="watch">Watch History</button><button data-v="wallets">Wallets</button><button data-v="positions">Positions</button><button data-v="agents">AI Agents</button><button data-v="routes">Execution Routes</button><button data-v="history">Trade History</button></nav>
+<section id="wallet-manager" hidden>
+<div class="card"><h2>Wallet tracking</h2><p class="muted">Discover strong traders automatically, or add a public wallet yourself.</p>
+<form id="wallet-form"><label>Public wallet address<input id="wallet-address" required minlength="32" maxlength="44" autocomplete="off" placeholder="Solana wallet address"></label><label>Name (optional)<input id="wallet-label" maxlength="100" placeholder="Wallet label"></label><button type="submit">Add wallet</button><p id="wallet-form-message" role="status"></p></form>
+</div></section><section id="content" aria-live="polite"></section>
+<footer>Market discovery · Paper trading</footer>
+</main><script src="/static/app.js"></script></body></html>

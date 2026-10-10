@@ -3,3 +3,4 @@ uvicorn[standard]>=0.32
 python-dotenv>=1.0
 httpx>=0.27
 pydantic>=2.9
+websockets>=13,<17
