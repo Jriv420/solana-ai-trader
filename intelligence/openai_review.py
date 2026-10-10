@@ -34,7 +34,7 @@ def request_body(state):
               'Traction can lead to rapid gains or losses; high volume may be artificial. '
               'Holder concentration and bundle clues can increase downside risk but are not verified causes of coin death. '
               'Score evidence quality 0-100, not profit probability. Give a short reason. '
-              'You cannot override independent risk gates. For connection_test return score 50.'+GUIDANCE),
+              'You cannot override independent risk gates. For connection_test return score 50.'+GUIDANCE+(' Active exploratory paper trial: qualified wallets are optional; assess fresh buy flow, volume acceleration, liquidity and security evidence on their own merits. Missing wallet or narrative evidence alone does not require a weak score, but missing market evidence and manipulation concerns remain material.' if (state.get('paper_risk_trial') or {}).get('active') else '')),
             'input':evidence,'text':{'format':{'type':'json_schema','name':'setup_review','strict':True,
               'schema':{'type':'object','properties':{'score':{'type':'number'},'reason':{'type':'string'}},
                         'required':['score','reason'],'additionalProperties':False}}}}

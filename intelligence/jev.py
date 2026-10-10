@@ -24,7 +24,11 @@ def request_body(state,questions):
                   'Traction can lead to rapid gains or losses; high volume can be artificial. '
                   'Consider bundle clues and holder concentration without claiming verified coordination or coin death. '
                   +GUIDANCE+' '.join(questions))
-    return {'model':'openjev','state':state,'questions':{'setup':{'type':'score','instructions':instructions,'criteria':LEVELS}}}
+    criteria=list(LEVELS)
+    if (state.get('paper_risk_trial') or {}).get('active'):
+        criteria[3]='Strong fresh market participation, sustained buy flow and volume acceleration with current security and liquidity evidence; qualified wallets are helpful but optional for this exploratory paper trial. Missing narrative and bundle information remain uncertain.'
+        instructions+=' Active exploratory paper trial: assess whether supplied market evidence supports a simulated test. Qualified wallets are optional for level 3, not mandatory; do not promote weak or missing market evidence. Security and account limits remain mandatory.'
+    return {'model':'openjev','state':state,'questions':{'setup':{'type':'score','instructions':instructions,'criteria':criteria}}}
 
 def normalize_response(data):
     if not isinstance(data,dict) or data.get('error'):raise ValueError('Invalid OpenJEV response')

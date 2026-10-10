@@ -105,7 +105,7 @@ async def loop():
                 observations.append(observation)
             STATE["opportunities"]=observations
             reasons=Counter(reason for o in observations for reason in ((o.get('filter') or {}).get('reasons',[])+(o.get('entry') or {}).get('reasons',[])))
-            diagnostic={'finished_at':time.time(),'checked':len(ts),'evaluated':len(observations),'evaluation_failures':STATE['evaluation_failures'],'failure_types':dict(Counter(type(x).__name__ for x in results if isinstance(x,Exception))),'statuses':dict(Counter(o.get('status','unknown') for o in observations)),'blockers':dict(reasons.most_common(8)),'paper_buys':sum('paper_action' in o for o in observations),'open_positions':len(paper_trader.open_positions())}
+            diagnostic={'finished_at':time.time(),'checked':len(ts),'evaluated':len(observations),'evaluation_failures':STATE['evaluation_failures'],'failure_types':dict(Counter(type(x).__name__ for x in results if isinstance(x,Exception))),'statuses':dict(Counter(o.get('status','unknown') for o in observations)),'blockers':dict(reasons.most_common(8)),'paper_buys':sum('paper_action' in o for o in observations),'open_positions':len(paper_trader.open_positions()),'risk_trial_active':risk_trial_status()['active'],'model_assessments':dict(Counter(str(o['fast']['provider'])+': '+str(o['fast']['score']) for o in observations if o.get('fast')))}
             STATE['scan']=diagnostic
             logging.getLogger('uvicorn.error').info('NEXUS scan summary %s',diagnostic)
             STATE.pop("error",None)
