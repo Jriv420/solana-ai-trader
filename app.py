@@ -1,4 +1,5 @@
-import asyncio,time
+import asyncio,time,logging,traceback
+from collections import Counter
 from contextlib import asynccontextmanager
 from pathlib import Path
 from fastapi import FastAPI, HTTPException, Request
@@ -65,6 +66,7 @@ async def analyze(t):
 async def loop():
     while True:
         try:
+            STATE['scan_started_at']=time.time()
             ts=annotate_identity(await scan_tokens(),[x['token'] for x in store.watch_history(limit=2000)])
             sol_price=await get_sol_price()
             for token in ts:token["sol_price_usd"]=sol_price
@@ -87,8 +89,15 @@ async def loop():
                 store.record_observation(observation)
                 observations.append(observation)
             STATE["opportunities"]=observations
+            reasons=Counter(reason for o in observations for reason in ((o.get('filter') or {}).get('reasons',[])+(o.get('entry') or {}).get('reasons',[])))
+            diagnostic={'finished_at':time.time(),'checked':len(ts),'evaluated':len(observations),'evaluation_failures':STATE['evaluation_failures'],'failure_types':dict(Counter(type(x).__name__ for x in results if isinstance(x,Exception))),'statuses':dict(Counter(o.get('status','unknown') for o in observations)),'blockers':dict(reasons.most_common(8)),'paper_buys':sum('paper_action' in o for o in observations),'open_positions':len(paper_trader.open_positions())}
+            STATE['scan']=diagnostic
+            logging.getLogger('uvicorn.error').info('NEXUS scan summary %s',diagnostic)
             STATE.pop("error",None)
-        except Exception:STATE["error"]='Scan unavailable; retrying. Check provider connections.'
+        except Exception as exc:
+            STATE["error"]='Scan unavailable; retrying. Check provider connections.'
+            frame=traceback.extract_tb(exc.__traceback__)[-1]
+            logging.getLogger('uvicorn.error').warning('NEXUS scan failed: %s at %s:%s (%s)',type(exc).__name__,Path(frame.filename).name,frame.lineno,frame.name)
         await asyncio.sleep(settings.scan_interval_seconds)
 @asynccontextmanager
 async def life(app):
@@ -104,7 +113,7 @@ app.mount("/static",StaticFiles(directory=D),name="static")
 @app.get("/")
 async def home():return FileResponse(D/"index.html")
 @app.get("/api/status")
-async def status():return {"paper_mode":settings.paper_mode,"balance_sol":paper_trader.balance_sol(),"open_positions":paper_trader.open_positions(),"agents":STATE["agents"],"error":STATE.get("error"),"new_pairs_feed":dict(FEED),"paper_metrics":store.paper_metrics()}
+async def status():return {"paper_mode":settings.paper_mode,"balance_sol":paper_trader.balance_sol(),"open_positions":paper_trader.open_positions(),"agents":STATE["agents"],"error":STATE.get("error"),"new_pairs_feed":dict(FEED),"paper_metrics":store.paper_metrics(),"scan":STATE.get("scan"),"scan_started_at":STATE.get("scan_started_at")}
 @app.get("/api/opportunities")
 async def opps():return STATE["opportunities"]
 @app.get("/api/trades")
@@ -221,40 +230,5 @@ async def trending(window: str = "5m"):
         x['volume_mc_ratio']=float(token.get(field) or 0)/float(token['market_cap_usd'])
     items.sort(key=lambda x:(x['trending_score'],float(x['token'].get(field) or 0)),reverse=True)
     return {"items":items[:100],"window":window if window in {'5m','1h','24h'} else '5m',"scope":"Recently scanned tokens; not the entire Solana market", "ranking":"70% volume rank + 30% market cap rank"}
-import os
-import base64
-import secrets
-from fastapi import Request
-from fastapi.responses import Response
-
-@app.middleware("http")
-async def nexus_security(request: Request, call_next):
-    password = os.getenv("NEXUS_PASSWORD")
-
-    if not password:
-        return Response("NEXUS password not configured", status_code=503)
-
-    authorization = request.headers.get("Authorization", "")
-    valid = False
-
-    if authorization.startswith("Basic "):
-        try:
-            encoded = authorization.split(" ", 1)[1]
-            decoded = base64.b64decode(encoded).decode()
-            username, supplied_password = decoded.split(":", 1)
-
-            valid = (
-                secrets.compare_digest(username, "nexus")
-                and secrets.compare_digest(supplied_password, password)
-            )
-        except (ValueError, UnicodeDecodeError):
-            pass
-
-    if not valid:
-        return Response(
-            "Login required",
-            status_code=401,
-            headers={"WWW-Authenticate": 'Basic realm="NEXUS"'}
-        )
-
-    return await call_next(request)
+from dashboard_auth import install as install_auth
+install_auth(app,D)
