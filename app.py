@@ -7,7 +7,7 @@ from pydantic import BaseModel, Field
 from urllib.parse import urlsplit
 from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
-from config.settings import settings
+from config.settings import settings,trading_settings,risk_trial_status
 from data.token_stream import scan_tokens, stream_new_tokens, FEED
 from data.social_data import get_social_snapshot, social_loop, STATUS as SOCIAL_STATUS
 from data.market_data import get_sol_price
@@ -37,6 +37,7 @@ from execution.router import choose_route
 
 STATE={"opportunities":[],"agents":{"jev":"standby","laya":"standby","darwin":"standby","wallet_ai":"active","social_ai":"active","risk_ai":"active"}}
 async def analyze(t):
+    rules=trading_settings()
     social_evidence=await get_social_snapshot(t['mint'])
     t=dict(t,social_context=social_evidence)
     t=dict(t,research=narrative_context(t["mint"],t))
@@ -45,6 +46,7 @@ async def analyze(t):
     t.update(wallet_context=w,social_context=social_evidence)
     f=evaluate_token(t)
     t['setup_type']=f['mode']
+    t['paper_risk_trial']=risk_trial_status()
     t['missed_opportunity_learning']=STATE.get('missed_learning',{})
     discretionary=exception_eligible(t,f)
     if not f["pass"] and not discretionary:
@@ -53,7 +55,7 @@ async def analyze(t):
     # Bound exploratory reviews to one per minute; normal qualified reviews keep their existing limits.
     explore=discretionary and time.time()-STATE.get('last_exception_review',0)>=60
     if explore:STATE['last_exception_review']=time.time()
-    fast=await evaluate_fast(t) if w['score']>=settings.min_wallet_score or explore else dict(_fallback(t),reason='Awaiting qualified wallet evidence before paid AI escalation')
+    fast=await evaluate_fast(t) if w['score']>=rules.min_wallet_score or explore else dict(_fallback(t),reason='Awaiting qualified wallet evidence before paid AI escalation')
     STATE['agents'][fast['provider']]='active'
     STATE['agents']['wallet_ai']=w['status']
     STATE['agents']['social_ai']=social_evidence.get('status','unknown')
@@ -128,7 +130,7 @@ def healthz():return {"ready":True}
 @app.get("/")
 async def home():return FileResponse(D/"index.html")
 @app.get("/api/status")
-async def status():return {"paper_mode":settings.paper_mode,"balance_sol":paper_trader.balance_sol(),"open_positions":paper_trader.open_positions(),"agents":STATE["agents"],"error":STATE.get("error"),"new_pairs_feed":dict(FEED),"paper_metrics":store.paper_metrics(),"missed_learning":STATE.get("missed_learning",{}),"scan":STATE.get("scan"),"scan_started_at":STATE.get("scan_started_at")}
+async def status():return {"risk_trial":risk_trial_status(),"paper_mode":settings.paper_mode,"balance_sol":paper_trader.balance_sol(),"open_positions":paper_trader.open_positions(),"agents":STATE["agents"],"error":STATE.get("error"),"new_pairs_feed":dict(FEED),"paper_metrics":store.paper_metrics(),"missed_learning":STATE.get("missed_learning",{}),"scan":STATE.get("scan"),"scan_started_at":STATE.get("scan_started_at")}
 @app.get("/api/opportunities")
 async def opps():return STATE["opportunities"]
 @app.get("/api/trades")

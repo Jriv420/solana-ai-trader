@@ -5,7 +5,7 @@ import httpx
 from database.research import research,finite
 from database.store import store
 from data.tracked_wallets import valid_address
-from config.settings import settings
+from config.settings import settings,trading_settings
 STATUS={'rugcheck':'starting'}
 
 
@@ -39,7 +39,7 @@ async def security_loop():
             eligible=[x['token'] for x in items if time.time()-x.get('last_seen',0)<600 and valid_address(x['token'].get('mint',''))]
             # At most one report every ten seconds, cache success for five minutes.
             # Check actionable market data first instead of spending all checks on thin launches.
-            eligible.sort(key=lambda t:(float(t.get('liquidity_usd') or 0)<settings.min_liquidity_usd,
+            eligible.sort(key=lambda t:(float(t.get('liquidity_usd') or 0)<trading_settings().min_liquidity_usd,
                                         research.security(t['mint']).get('checked_at',0)))
             if eligible:
                 t=eligible[0];cached=research.security(t['mint']);ttl=300 if cached['status']=='ok' else 60

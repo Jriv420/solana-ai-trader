@@ -68,3 +68,28 @@ class Settings:
     min_wallet_score: float=_f("MIN_WALLET_SCORE",50)
     max_risk_score: float=_f("MAX_RISK_SCORE",70)
 settings=Settings()
+
+
+def trading_settings(base=None,now=None):
+    """A fixed-deadline paper trial, evaluated on every decision, survives restarts."""
+    import math,time
+    from dataclasses import replace
+    base=base or settings
+    now=time.time() if now is None else now
+    until=_f('PAPER_RISK_TRIAL_UNTIL',0)
+    if not base.paper_mode or not math.isfinite(until) or now>=until:return base
+    return replace(base,min_liquidity_usd=min(base.min_liquidity_usd,5000),
+        min_combined_score=min(base.min_combined_score,60),min_wallet_score=min(base.min_wallet_score,40),
+        max_risk_score=max(base.max_risk_score,75),revival_min_volume_5m_usd=min(base.revival_min_volume_5m_usd,2000),
+        revival_volume_ratio=min(base.revival_volume_ratio,1.5),default_buy_sol=min(base.default_buy_sol,.025),
+        max_trade_sol=min(base.max_trade_sol,.025),max_open_positions=min(base.max_open_positions,3),
+        max_daily_loss_sol=min(base.max_daily_loss_sol,.15))
+
+def risk_trial_status(now=None):
+    import time
+    now=time.time() if now is None else now
+    rules=trading_settings(now=now);until=_f('PAPER_RISK_TRIAL_UNTIL',0)
+    return {'active':rules is not settings,'ends_at':until if until>0 else None,
+        'min_liquidity_usd':rules.min_liquidity_usd,'min_combined_score':rules.min_combined_score,
+        'min_wallet_score':rules.min_wallet_score,'max_trade_sol':rules.max_trade_sol,
+        'max_open_positions':rules.max_open_positions,'max_daily_loss_sol':rules.max_daily_loss_sol}
