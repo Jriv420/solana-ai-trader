@@ -95,7 +95,7 @@ function tokenCard(item, history=false) {
     <p>Setup: ${escapeHtml(t.setup_type || 'Awaiting evaluation')} · Wallet: ${escapeHtml(item.wallet?.status || t.wallet_context?.status || 'unknown')}</p>
     ${researchSummary(t.research)}<button data-research-mint="${escapeHtml(t.mint)}">Research &amp; label narrative</button>
     <div class="tracked-wallets">${trackedWalletSection(t.mint,Number(t.price_usd || 0))}</div>
-    ${t.identity_check?.status==='ambiguous' ? `<p class="negative">${escapeHtml(t.identity_check.message)} Paper entry blocked for ambiguous branding.</p><p class="mint">Other matching contracts:<br>${t.identity_check.matching_contracts.map(escapeHtml).join('<br>')}</p>`:''}
+    ${t.identity_check?.status==='ambiguous' ? `<p class="negative">${escapeHtml(t.identity_check.message)} Branding warning only; this contract is evaluated separately.</p><p class="mint">Other matching contracts:<br>${t.identity_check.matching_contracts.map(escapeHtml).join('<br>')}</p>`:''}
     <p class="mint">${escapeHtml(t.mint)}</p></details>
   </article>`;
 }

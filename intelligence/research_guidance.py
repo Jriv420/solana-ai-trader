@@ -10,4 +10,6 @@ GUIDANCE=(
     'Require forward validation across distinct coins and check dependence on a few outsized winners; no guaranteed profitable AI strategy is established. '
 )
 
-GUIDANCE += " Study supplied missed_opportunity_learning: compare rejected winners with rejected losers and original evidence. A later surge does not prove the decision was wrong or an exit executable. In paper mode strong model evidence can waive wallet/combined/revival strategy thresholds; security, identity, liquidity and account limits remain mandatory. Explain evidence and uncertainty, never infer missing endorsements."
+GUIDANCE += " Study supplied missed_opportunity_learning: compare rejected winners with rejected losers and original evidence. A later surge does not prove the decision was wrong or an exit executable. In paper mode strong model evidence can waive wallet/combined/revival strategy thresholds; security, liquidity and account limits remain mandatory. Explain evidence and uncertainty, never infer missing endorsements."
+
+GUIDANCE += " Matching names and tickers across different contracts are a branding warning, not proof of a copy or a verified original. Assess the exact supplied mint independently using its own security, liquidity, volume and flow. Never transfer another contract's history, endorsement, wallet holdings or authenticity to this one, and do not infer original status merely from age or market cap."
