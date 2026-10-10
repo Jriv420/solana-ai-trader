@@ -4,6 +4,7 @@ from datetime import datetime,timezone
 import httpx
 from config.settings import settings
 from database.store import store
+from intelligence.research_guidance import GUIDANCE
 
 _semaphore=asyncio.Semaphore(1)
 _blocked_until=0
@@ -33,7 +34,7 @@ def request_body(state):
               'Traction can lead to rapid gains or losses; high volume may be artificial. '
               'Holder concentration and bundle clues can increase downside risk but are not verified causes of coin death. '
               'Score evidence quality 0-100, not profit probability. Give a short reason. '
-              'You cannot override independent risk gates. For connection_test return score 50.'),
+              'You cannot override independent risk gates. For connection_test return score 50.'+GUIDANCE),
             'input':evidence,'text':{'format':{'type':'json_schema','name':'setup_review','strict':True,
               'schema':{'type':'object','properties':{'score':{'type':'number'},'reason':{'type':'string'}},
                         'required':['score','reason'],'additionalProperties':False}}}}

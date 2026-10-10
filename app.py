@@ -34,10 +34,11 @@ from execution.router import choose_route
 
 STATE={"opportunities":[],"agents":{"jev":"standby","laya":"standby","darwin":"standby","wallet_ai":"active","social_ai":"active","risk_ai":"active"}}
 async def analyze(t):
+    social_evidence=await get_social_snapshot(t['mint'])
+    t=dict(t,social_context=social_evidence)
     t=dict(t,research=narrative_context(t["mint"],t))
     research.snapshot(t,t["research"]["features"])
     w=score_wallet_context(t)
-    social_evidence=await get_social_snapshot(t['mint'])
     t.update(wallet_context=w,social_context=social_evidence)
     f=evaluate_token(t)
     t['setup_type']=f['mode']

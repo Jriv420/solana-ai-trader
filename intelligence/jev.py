@@ -2,6 +2,7 @@
 import asyncio,math,time
 import httpx
 from config.settings import settings
+from intelligence.research_guidance import GUIDANCE
 
 LEVELS=[
     'Insufficient reliable evidence, or unfavorable participation; do not favor this setup.',
@@ -22,7 +23,7 @@ def request_body(state,questions):
                   'Compare supplied market-cap and volume cohorts, relative turnover and 5m/1h/24h outcomes. '
                   'Traction can lead to rapid gains or losses; high volume can be artificial. '
                   'Consider bundle clues and holder concentration without claiming verified coordination or coin death. '
-                  +' '.join(questions))
+                  +GUIDANCE+' '.join(questions))
     return {'model':'openjev','state':state,'questions':{'setup':{'type':'score','instructions':instructions,'criteria':LEVELS}}}
 
 def normalize_response(data):
