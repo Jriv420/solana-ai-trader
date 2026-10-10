@@ -135,3 +135,9 @@ Primary sources reviewed:
 - Hour-Aware Adaptive Risk Management, https://arxiv.org/abs/2606.08232 — exploratory paper-trading evidence with fragile results; do not transfer fitted thresholds or reported returns to this bot.
 
 No independently verified profitable Jev + Gemini pump.fun strategy was established by this review. Principles are incorporated as hypotheses and conservative guidance; the cited models/datasets have not been installed or trained here. Validate future paper results after costs and across independent coins before claiming an edge.
+
+## Mobile login and scanner diagnostics
+
+Unauthenticated dashboard visits now open /login, a regular password form using the existing NEXUS_PASSWORD. Successful login stores a 12-hour signed Secure/HttpOnly/SameSite=Strict cookie; rotating the dashboard password invalidates sessions. Basic authentication remains supported for compatibility. Cookie-authenticated writes require the same Origin, and login rejects cross-origin submissions and rate limits failed attempts. Credentials never appear in URLs or browser storage. Expired API sessions redirect the dashboard to sign-in.
+
+/api/status includes the last completed scan, coin counts, evaluation failure types, rejection reasons, paper buys this scan, and open positions. Aggregate scan summaries are logged without addresses, keys, passwords or provider response bodies. Completed scan statistics appear in Positions, Trade History, AI Agents, and Opportunities. A healthy web server alone does not establish a healthy scanner; missing or old scan completion and nonzero evaluation errors require investigation.

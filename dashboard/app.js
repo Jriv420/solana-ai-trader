@@ -9,6 +9,7 @@ let status = {}, opportunities = [], trades = [], launches = {items:[],feed:{}},
 let windowSize = '5m', selectedMint = null, details = [], loading = false, refreshError = '';
 async function getData(path) {
   const response = await fetch(path, {cache:'no-store'});
+  if(response.status===401){location.replace('/login');throw new Error('Please sign in again.');}
   if (!response.ok) throw new Error(`HTTP ${response.status}`);
   return response.json();
 }
@@ -126,6 +127,8 @@ function render() {
   document.getElementById('research-manager').hidden=currentPage!=='research';
   document.querySelectorAll('nav button').forEach(b => { const active=b.dataset.v===currentPage; b.classList.toggle('active',active); b.setAttribute('aria-pressed',String(active)); });
   let html = refreshError ? `<p role="status">${escapeHtml(refreshError)}</p>`:'';
+  const scan=status.scan;
+  if(scan && ['positions','history','agents','scan'].includes(currentPage)) html+=`<div class="card"><h2>Paper scanner</h2><p>Last completed: ${stamp(scan.finished_at)} · ${Number(scan.evaluated)} coins evaluated · ${Number(scan.evaluation_failures)} errors · ${Number(scan.paper_buys)} buys this scan</p><p>${Object.entries(scan.blockers || {}).map(([reason,count])=>`${Number(count)}: ${escapeHtml(reason)}`).join('<br>') || 'No rejection reasons in this scan.'}</p></div>`;
   if (status.error) html+=`<p role="status">Scanner error: ${escapeHtml(status.error)}</p>`;
   if (currentPage==='scan') html += feedHeader('Opportunities','Latest scan batch · Scores reflect bot signals.',sortControl())+cards(opportunities,'Waiting for a scan.');
   else if (currentPage==='new') html += feedHeader('New Pairs',`<span class="feed-dot"></span>${escapeHtml(launches.feed.status || 'connecting')} · Pump.fun launches from the past hour`,sortControl())+cards(launches.items,'Waiting for live launches. Market data appears after indexing.');
