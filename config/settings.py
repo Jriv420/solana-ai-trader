@@ -46,6 +46,11 @@ class Settings:
     openai_model: str=os.getenv("OPENAI_MODEL","gpt-5.6-terra")
     openai_timeout_ms: int=_i("OPENAI_TIMEOUT_MS",15000)
     openai_daily_request_limit: int=_i("OPENAI_DAILY_REQUEST_LIMIT",10)
+    gemini_api_key: str=os.getenv("GEMINI_API_KEY","")
+    gemini_model: str=os.getenv("GEMINI_MODEL","gemini-3.5-flash-lite")
+    gemini_endpoint: str="https://generativelanguage.googleapis.com/v1beta/models/"
+    gemini_timeout_ms: int=_i("GEMINI_TIMEOUT_MS",15000)
+    gemini_daily_request_limit: int=_i("GEMINI_DAILY_REQUEST_LIMIT",100)
     laya_api_key: str=os.getenv("LAYA_API_KEY","")
     laya_endpoint: str=os.getenv("LAYA_ENDPOINT","")
     laya_timeout_ms: int=_i("LAYA_TIMEOUT_MS",1200)

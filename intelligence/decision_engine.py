@@ -2,6 +2,7 @@ from intelligence.jev import ask_jev
 from intelligence.laya import ask_laya
 from intelligence.darwin import ask_darwin
 from intelligence.openai_review import ask_openai, ReviewPaused
+from intelligence.gemini_review import ask_gemini
 import math,time
 CONNECTIONS={}
 _CACHE={}
@@ -24,6 +25,7 @@ async def provider_result(provider,state):
         if provider=='jev':response=await ask_jev(state,Q)
         elif provider=='laya':response=await ask_laya(state,Q)
         elif provider=='openai':response=await ask_openai(state)
+        elif provider=='gemini':response=await ask_gemini(state)
         else:response=await ask_darwin("Evaluate evidence conservatively. "+" ".join(Q)+" Return a numeric score from 0 to 100.",state)
         score=_score(response)
         if score is None:raise ValueError('No finite numeric score')
@@ -50,10 +52,11 @@ async def evaluate_fast(state):
     if result is None:result=_fallback(state)
     # A second review can lower a strong score, never raise it past the first assessment.
     from config.settings import settings
-    if settings.openai_api_key and result['score']>=60:
-        review=await provider_result('openai',state)
+    reviewer='gemini' if getattr(settings,'gemini_api_key','') else 'openai' if settings.openai_api_key else None
+    if reviewer and result['score']>=60:
+        review=await provider_result(reviewer,state)
         if review is not None:
-            result=dict(result,score=min(result['score'],review['score']),openai_review=review)
+            result=dict(result,score=min(result['score'],review['score']),**{reviewer+'_review':review})
     if key:
         _CACHE[key]=(now,result)
         if len(_CACHE)>1000:_CACHE.pop(min(_CACHE,key=lambda k:_CACHE[k][0]))
