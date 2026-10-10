@@ -1,5 +1,6 @@
 from dataclasses import dataclass
 import os
+from urllib.parse import quote
 from dotenv import load_dotenv
 load_dotenv()
 
@@ -22,10 +23,20 @@ class Settings:
     scan_interval_seconds: int=_i("SCAN_INTERVAL_SECONDS",10)
     watchlist_mints: tuple=tuple(x.strip() for x in os.getenv("WATCHLIST_MINTS","").split(",") if x.strip())
     helius_api_key: str=os.getenv("HELIUS_API_KEY","")
-    solana_rpc_url: str=os.getenv("SOLANA_RPC_URL","")
+    solana_rpc_url: str=os.getenv("SOLANA_RPC_URL","") or ("https://mainnet.helius-rpc.com/?api-key="+quote(os.getenv("HELIUS_API_KEY",""),safe='') if os.getenv("HELIUS_API_KEY") else "")
     whale_portfolio_usd: float=_f("WHALE_PORTFOLIO_USD",100000)
     whale_position_usd: float=_f("WHALE_POSITION_USD",25000)
     wallet_min_matched_sells: int=_i("WALLET_MIN_MATCHED_SELLS",10)
+    x_bearer_token: str=os.getenv("X_BEARER_TOKEN","")
+    x_kol_ids: tuple=tuple(x.strip() for x in os.getenv("X_KOL_IDS","").split(",") if x.strip())
+    revival_min_volume_5m_usd: float=_f("REVIVAL_MIN_VOLUME_5M_USD",5000)
+    revival_volume_ratio: float=_f("REVIVAL_VOLUME_RATIO",2)
+    paper_fee_bps: float=_f("PAPER_FEE_BPS",100)
+    paper_slippage_bps: float=_f("PAPER_SLIPPAGE_BPS",100)
+    stop_loss_pct: float=_f("STOP_LOSS_PCT",20)
+    take_profit_pct: float=_f("TAKE_PROFIT_PCT",50)
+    trailing_stop_pct: float=_f("TRAILING_STOP_PCT",20)
+    paper_max_hold_minutes: float=_f("PAPER_MAX_HOLD_MINUTES",1440)
     tracked_wallets_json: str=os.getenv("TRACKED_WALLETS", "[]")
     jev_api_key: str=os.getenv("JEV_API_KEY","")
     jev_endpoint: str=os.getenv("JEV_ENDPOINT","")

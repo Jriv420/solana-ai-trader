@@ -1,6 +1,8 @@
 from config.settings import settings
+import math
 def hard_risk_check(amount,open_positions,daily_pnl,token):
     r=[]
+    if not math.isfinite(amount):r.append("invalid trade size")
     if amount<=0:r.append("amount must be positive")
     if amount>settings.max_trade_sol:r.append("trade exceeds max")
     if open_positions>=settings.max_open_positions:r.append("max positions reached")

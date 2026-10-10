@@ -8,7 +8,9 @@ from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
 from config.settings import settings
 from data.token_stream import scan_tokens, stream_new_tokens, FEED
-from data.social_data import get_social_snapshot
+from data.social_data import get_social_snapshot, social_loop, STATUS as SOCIAL_STATUS
+from data.market_data import get_sol_price
+from data.wallet_signals import wallet_signals_loop
 from database.research import research
 from intelligence.narrative import context as narrative_context
 from data.security_research import security_loop, STATUS as SECURITY_STATUS
@@ -16,7 +18,7 @@ from typing import Literal
 from data.tracked_wallets import get_tracked_wallet_holders, valid_address, configured_wallets, _cache as wallet_balance_cache
 from data.wallet_discovery import wallet_learning_loop, STATUS as WALLET_STATUS
 from database.wallet_registry import wallet_registry
-from intelligence.decision_engine import evaluate_fast
+from intelligence.decision_engine import evaluate_fast, CONNECTIONS, provider_result, _fallback
 from intelligence.wallet_ai import score_wallet_context
 from intelligence.social_ai import score_social_context
 from intelligence.risk_ai import score_contextual_risk
@@ -33,41 +35,62 @@ STATE={"opportunities":[],"agents":{"jev":"standby","laya":"standby","darwin":"s
 async def analyze(t):
     t=dict(t,research=narrative_context(t["mint"]))
     research.snapshot(t,t["research"]["features"])
+    w=score_wallet_context(t)
+    social_evidence=await get_social_snapshot(t['mint'])
+    t.update(wallet_context=w,social_context=social_evidence)
     f=evaluate_token(t)
+    t['setup_type']=f['mode']
     if not f["pass"]:return {"token":t,"status":"rejected","filter":f}
-    fast=await evaluate_fast(t);STATE["agents"][fast["provider"]]="active"
-    w=score_wallet_context(t);s=score_social_context(await get_social_snapshot(t.get("symbol","")));r=score_contextual_risk(t)
+    # Spend model calls on setups that can pass the independent wallet gate.
+    fast=await evaluate_fast(t) if w['score']>=settings.min_wallet_score else dict(_fallback(t),reason='Awaiting qualified wallet evidence before paid AI escalation')
+    STATE['agents'][fast['provider']]='active'
+    STATE['agents']['wallet_ai']=w['status']
+    STATE['agents']['social_ai']=social_evidence.get('status','unknown')
+    s=score_social_context(social_evidence);r=score_contextual_risk(t)
     e=should_enter(t,float(fast["score"]),float(w["score"]),float(s["score"]),float(r["score"]))
     o={"token":t,"fast":fast,"wallet":w,"social":s,"risk":r,"entry":e,"route":choose_route(t),"status":"candidate" if e["enter"] else "watch"}
     if e["enter"] and settings.paper_mode:
         existing={p["mint"] for p in paper_trader.open_positions()}
         if t["mint"] not in existing:
             a=position_size_sol(e["combined_score"],paper_trader.balance_sol())
-            h=hard_risk_check(a,len(existing),store.realized(),t)
-            if h["pass"]:paper_trader.buy(t,a,o);o["paper_action"]=f"BUY {a} SOL"
+            h=hard_risk_check(a,len(existing),store.daily_realized(),t)
+            if h["pass"]:
+                bought=paper_trader.buy(t,a,o)
+                if bought:o["paper_action"]=f"BUY {a} SOL"
+                else:o['paper_blocked']='Fresh SOL price or available balance missing'
+            else:o['paper_blocked']='; '.join(h['reasons'])
     return o
 async def loop():
     while True:
         try:
             ts=await scan_tokens()
+            sol_price=await get_sol_price()
+            for token in ts:token["sol_price_usd"]=sol_price
+            by={t['mint']:t for t in ts}
+            # Process exits before entries so risk limits use the latest realized balance.
+            for position in paper_trader.open_positions():
+                token=by.get(position['mint'])
+                if token:
+                    store.mark_peak(position['id'],token.get('price_usd') or 0)
+                    decision=should_exit(position,token)
+                    if decision['exit']:paper_trader.sell(position,token,decision['reason'])
             observations=[]
-            for t in ts:
-                if not t.get("error"):
-                    observation=await analyze(t)
-                    store.record_observation(observation)
-                    observations.append(observation)
+            semaphore=asyncio.Semaphore(4)
+            async def evaluate(t):
+                async with semaphore:return await analyze(t)
+            results=await asyncio.gather(*(evaluate(t) for t in ts if not t.get('error')),return_exceptions=True)
+            STATE['evaluation_failures']=sum(isinstance(x,Exception) for x in results)
+            for observation in results:
+                if isinstance(observation,Exception):continue
+                store.record_observation(observation)
+                observations.append(observation)
             STATE["opportunities"]=observations
             STATE.pop("error",None)
-            by={t["mint"]:t for t in ts}
-            for p in paper_trader.open_positions():
-                if p["mint"] in by:
-                    d=should_exit(p,by[p["mint"]])
-                    if d["exit"]:paper_trader.sell(p,by[p["mint"]],d["reason"])
-        except Exception as e:STATE["error"]=str(e)
+        except Exception:STATE["error"]='Scan unavailable; retrying. Check provider connections.'
         await asyncio.sleep(settings.scan_interval_seconds)
 @asynccontextmanager
 async def life(app):
-    tasks=[asyncio.create_task(loop()),asyncio.create_task(stream_new_tokens()),asyncio.create_task(wallet_learning_loop()),asyncio.create_task(security_loop())]
+    tasks=[asyncio.create_task(loop()),asyncio.create_task(stream_new_tokens()),asyncio.create_task(wallet_learning_loop()),asyncio.create_task(security_loop()),asyncio.create_task(social_loop()),asyncio.create_task(wallet_signals_loop())]
     try:
         yield
     finally:
@@ -79,7 +102,7 @@ app.mount("/static",StaticFiles(directory=D),name="static")
 @app.get("/")
 async def home():return FileResponse(D/"index.html")
 @app.get("/api/status")
-async def status():return {"paper_mode":settings.paper_mode,"balance_sol":paper_trader.balance_sol(),"open_positions":paper_trader.open_positions(),"agents":STATE["agents"],"error":STATE.get("error"),"new_pairs_feed":dict(FEED)}
+async def status():return {"paper_mode":settings.paper_mode,"balance_sol":paper_trader.balance_sol(),"open_positions":paper_trader.open_positions(),"agents":STATE["agents"],"error":STATE.get("error"),"new_pairs_feed":dict(FEED),"paper_metrics":store.paper_metrics()}
 @app.get("/api/opportunities")
 async def opps():return STATE["opportunities"]
 @app.get("/api/trades")
@@ -124,6 +147,29 @@ async def remove_wallet(address: str, request: Request):
 async def tracked_wallets(mint: str):
     try:return await get_tracked_wallet_holders(mint)
     except ValueError:raise HTTPException(status_code=400,detail="Invalid mint address")
+def connection_summary():
+    import os
+    from database.store import DB
+    mount=os.getenv('RAILWAY_VOLUME_MOUNT_PATH')
+    persistent=bool(mount and DB.resolve().is_relative_to(Path(mount).resolve()))
+    models={}
+    for provider in ('jev','laya','darwin'):
+        configured=bool(getattr(settings,provider+'_api_key') and getattr(settings,provider+'_endpoint'))
+        models[provider]=dict(CONNECTIONS.get(provider,{}),configured=configured)
+        models[provider].setdefault('status','configured_untested' if configured else 'not_configured')
+    return {'models':models,'rpc':{'configured':bool(settings.solana_rpc_url),'status':WALLET_STATUS['discovery']},'helius':{'configured':bool(settings.helius_api_key),'status':WALLET_STATUS['learning']},'x':dict(SOCIAL_STATUS,configured=bool(settings.x_bearer_token)),'rugcheck':dict(SECURITY_STATUS),'storage':{'railway_volume_detected':persistent,'db_path':str(DB),'message':'Volume detected; verify memory survives a restart.' if persistent else 'Persistent Railway volume not detected; learning may reset on deployment.'},'paper_mode':settings.paper_mode,'live_execution_enabled':False}
+@app.get('/api/connections')
+async def connections():return connection_summary()
+@app.post('/api/connections/check')
+async def test_connections(request: Request):
+    check_wallet_write(request)
+    now=time.time()
+    if now-STATE.get('last_connection_test',0)<60:raise HTTPException(status_code=429,detail='Wait a minute before testing again')
+    STATE['last_connection_test']=now
+    for provider in ('jev','laya','darwin'):
+        await provider_result(provider,{'connection_test':True,'message':'Return a numeric score of 50. No trading decision.'})
+    return connection_summary()
+
 class NarrativeInput(BaseModel):
     wallet: str = Field(min_length=32,max_length=44)
     subject: str = Field(default="",max_length=100)
