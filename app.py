@@ -9,6 +9,10 @@ from fastapi.staticfiles import StaticFiles
 from config.settings import settings
 from data.token_stream import scan_tokens, stream_new_tokens, FEED
 from data.social_data import get_social_snapshot
+from database.research import research
+from intelligence.narrative import context as narrative_context
+from data.security_research import security_loop, STATUS as SECURITY_STATUS
+from typing import Literal
 from data.tracked_wallets import get_tracked_wallet_holders, valid_address, configured_wallets, _cache as wallet_balance_cache
 from data.wallet_discovery import wallet_learning_loop, STATUS as WALLET_STATUS
 from database.wallet_registry import wallet_registry
@@ -27,6 +31,8 @@ from execution.router import choose_route
 
 STATE={"opportunities":[],"agents":{"jev":"standby","laya":"standby","darwin":"standby","wallet_ai":"active","social_ai":"active","risk_ai":"active"}}
 async def analyze(t):
+    t=dict(t,research=narrative_context(t["mint"]))
+    research.snapshot(t,t["research"]["features"])
     f=evaluate_token(t)
     if not f["pass"]:return {"token":t,"status":"rejected","filter":f}
     fast=await evaluate_fast(t);STATE["agents"][fast["provider"]]="active"
@@ -61,7 +67,7 @@ async def loop():
         await asyncio.sleep(settings.scan_interval_seconds)
 @asynccontextmanager
 async def life(app):
-    tasks=[asyncio.create_task(loop()),asyncio.create_task(stream_new_tokens()),asyncio.create_task(wallet_learning_loop())]
+    tasks=[asyncio.create_task(loop()),asyncio.create_task(stream_new_tokens()),asyncio.create_task(wallet_learning_loop()),asyncio.create_task(security_loop())]
     try:
         yield
     finally:
@@ -118,6 +124,30 @@ async def remove_wallet(address: str, request: Request):
 async def tracked_wallets(mint: str):
     try:return await get_tracked_wallet_holders(mint)
     except ValueError:raise HTTPException(status_code=400,detail="Invalid mint address")
+class NarrativeInput(BaseModel):
+    wallet: str = Field(min_length=32,max_length=44)
+    subject: str = Field(default="",max_length=100)
+    identity: Literal["unknown","alleged","verified"] = "unknown"
+    endorsement: Literal["unknown","speculative","confirmed","denied"] = "unknown"
+    source_url: str = Field(default="",max_length=500)
+    note: str = Field(default="",max_length=500)
+@app.get("/api/research/{mint}")
+async def coin_research(mint: str):
+    if not valid_address(mint):raise HTTPException(status_code=400,detail="Invalid mint")
+    return research.detail(mint)
+@app.post("/api/research/{mint}/claims")
+async def add_claim(mint: str, claim: NarrativeInput, request: Request):
+    check_wallet_write(request)
+    if not valid_address(mint) or not valid_address(claim.wallet):raise HTTPException(status_code=400,detail="Use valid public addresses")
+    url=urlsplit(claim.source_url)
+    if claim.source_url and (url.scheme!='https' or not url.netloc or url.username or url.password):raise HTTPException(status_code=400,detail="Use a public HTTPS source link")
+    if (claim.identity=='verified' or claim.endorsement in {'confirmed','denied'}) and not claim.source_url:raise HTTPException(status_code=400,detail="A source link is required for reviewed verification or endorsement")
+    manual=[w for w in wallet_registry.list() if w['manual'] and not w['disabled']]
+    if not any(w['address']==claim.wallet for w in manual) and len(manual)>=50:raise HTTPException(status_code=409,detail="Manual tracking limit reached; stop tracking a wallet first")
+    # Researching a claimed wallet does not verify who owns it.
+    wallet_registry.add(claim.wallet,manual=True)
+    return {"saved":True,"id":research.claim(mint,claim.model_dump()),"provenance":"user_reviewed"}
+
 @app.get("/api/trending")
 async def trending(window: str = "5m"):
     field={"5m":"volume_5m_usd","1h":"volume_1h_usd","24h":"volume_24h_usd"}.get(window,"volume_5m_usd")

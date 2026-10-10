@@ -6,7 +6,18 @@
 <section class="stats" aria-label="Account summary"><div><small>Paper balance</small><strong id="balance">— SOL</strong></div><div><small>Open positions</small><strong id="positions">0</strong></div><span class="refresh-note">Updates every 5s</span></section>
 <div class="explore-heading"><div><p class="eyebrow">YOUR MARKET FEED</p><h2>Explore coins</h2></div></div>
 <label class="search-box"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" aria-hidden="true"><circle cx="10.5" cy="10.5" r="6.5"/><path d="m16 16 4.5 4.5"/></svg><input id="coin-search" type="search" placeholder="Search name, ticker or contract" aria-label="Search loaded coins" autocomplete="off"></label>
-<nav aria-label="Dashboard tabs"><button data-v="new">New Pairs</button><button data-v="trending">Trending</button><button data-v="scan">Opportunities</button><button data-v="watch">Watch History</button><button data-v="wallets">Wallets</button><button data-v="positions">Positions</button><button data-v="agents">AI Agents</button><button data-v="routes">Execution Routes</button><button data-v="history">Trade History</button></nav>
+<nav aria-label="Dashboard tabs"><button data-v="new">New Pairs</button><button data-v="trending">Trending</button><button data-v="scan">Opportunities</button><button data-v="watch">Watch History</button><button data-v="wallets">Wallets</button><button data-v="research">Narrative Research</button><button data-v="positions">Positions</button><button data-v="agents">AI Agents</button><button data-v="routes">Execution Routes</button><button data-v="history">Trade History</button></nav>
+<section id="research-manager" hidden><div class="card"><h2>Narrative evidence</h2><p class="muted">Save what you know now. A token gift is not a buy or endorsement. Verification below is your source review, not automatic authentication.</p>
+<form id="research-form">
+<label>Coin contract<input id="research-mint" required minlength="32" maxlength="44" placeholder="Coin mint address" autocomplete="off"></label>
+<label>Wallet<input id="research-wallet" required minlength="32" maxlength="44" placeholder="Public wallet address" autocomplete="off"></label>
+<label>Person / narrative tie<input id="research-subject" maxlength="100" placeholder="Name or lore connection"></label>
+<label>Wallet identity<select id="research-identity"><option value="unknown">Unknown</option><option value="alleged">Alleged owner</option><option value="verified">Verified by my source review</option></select></label>
+<label>Endorsement<select id="research-endorsement"><option value="unknown">Unknown</option><option value="speculative">Speculation only</option><option value="confirmed">Confirmed by my source review</option><option value="denied">Denied by source</option></select></label>
+<label>Source link<input id="research-source" type="url" maxlength="500" placeholder="https://x.com/... or other primary source"></label>
+<label>Notes<input id="research-note" maxlength="500" placeholder="What was sent or claimed?"></label>
+<button type="submit">Save evidence</button><p id="research-message" role="status"></p>
+</form></div></section>
 <section id="wallet-manager" hidden>
 <div class="card"><h2>Wallet tracking</h2><p class="muted">Discover strong traders automatically, or add a public wallet yourself.</p>
 <form id="wallet-form"><label>Public wallet address<input id="wallet-address" required minlength="32" maxlength="44" autocomplete="off" placeholder="Solana wallet address"></label><label>Name (optional)<input id="wallet-label" maxlength="100" placeholder="Wallet label"></label><button type="submit">Add wallet</button><p id="wallet-form-message" role="status"></p></form>

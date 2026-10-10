@@ -1,6 +1,6 @@
 from intelligence.jev import ask_jev
 from intelligence.laya import ask_laya
-Q=["Does this setup show meaningful participation?","Is accumulation strengthening?","Is there enough evidence to escalate?"]
+Q=["Use research evidence and learned forward outcomes. Never infer identity or endorsement from a token receipt. User-reviewed claims are not independently authenticated. Unknown bundle/security data is not safe data. Distinguish gains from subsequent drawdowns.","Does this setup show meaningful participation?","Is accumulation strengthening?","Is there enough evidence to escalate?"]
 def _fallback(s):
     b=float(s.get("buys_5m",0)); se=float(s.get("sells_5m",0)); li=float(s.get("liquidity_usd",0)); v=float(s.get("volume_5m_usd",0)); m=float(s.get("price_change_5m_pct",0))
     score=100*(.35*b/max(b+se,1)+.25*min(li/100000,1)+.25*min(v/500000,1)+.15*max(0,min((m+10)/30,1)))

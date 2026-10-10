@@ -8,6 +8,7 @@ from database.store import store
 from database.wallet_registry import wallet_registry
 from data.tracked_wallets import valid_address
 from intelligence.wallet_learning import normalize_transaction,evaluate_evidence
+from intelligence.narrative import record_transaction
 SYSTEM='11111111111111111111111111111111'
 STATUS={'discovery':'starting','learning':'starting','last_discovery':None,'last_learning':None}
 _seen={}
@@ -55,6 +56,7 @@ async def learn_wallet(address):
             response.raise_for_status();data=response.json()
             items=data['data']
             for item in items:
+                record_transaction(item,address)
                 if item.get('signature') in signatures:overlap=True
                 if item.get('parserStatus')!='OK':parser_error=True
                 event=normalize_transaction(item,address)

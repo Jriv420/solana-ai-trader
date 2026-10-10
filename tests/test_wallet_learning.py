@@ -46,6 +46,8 @@ class RegistryAndDiscovery(unittest.IsolatedAsyncioTestCase):
     async def asyncSetUp(self):
         self.tmp=tempfile.TemporaryDirectory();self.patch=patch.object(db,'DB',Path(self.tmp.name)/'registry.sqlite3');self.patch.start()
         db.Store().ensure_observations();wallet_registry.ensure()
+        from database.research import research
+        research.ensure()
     async def asyncTearDown(self):self.patch.stop();self.tmp.cleanup()
     async def test_whale_is_not_marked_profitable_and_disable_persists(self):
         wallet_registry.add(A);wallet_registry.position(A,MINT,'100000',30000)
