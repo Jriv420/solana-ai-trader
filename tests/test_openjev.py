@@ -6,6 +6,13 @@ from intelligence import jev
 from intelligence.decision_engine import _score
 
 class OpenJev(unittest.TestCase):
+    def test_trial_market_evidence_does_not_require_wallets(self):
+        normal=jev.request_body({},[])
+        trial=jev.request_body({'paper_risk_trial':{'active':True}},[])
+        self.assertIn('optional',trial['questions']['setup']['criteria'][3])
+        self.assertEqual(normal['questions']['setup']['criteria'],jev.LEVELS)
+        self.assertEqual(len(trial['questions']['setup']['criteria']),len(jev.LEVELS))
+
     def test_native_question_map_and_score_normalization(self):
         body=jev.request_body({'volume':50},['Missing information remains unknown.'])
         self.assertEqual(body['model'],'openjev')
