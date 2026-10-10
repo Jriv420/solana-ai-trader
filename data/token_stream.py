@@ -21,3 +21,94 @@ async def scan_tokens():
         except Exception as e:
             out.append({"mint":m,"symbol":m[:6],"name":"Unavailable","error":str(e),"source":"error"})
     return out
+
+# NEXUS automatic Solana token discovery - Phase 1
+import asyncio
+import httpx
+
+DISCOVERY_URLS = [
+    "https://api.dexscreener.com/token-profiles/latest/v1",
+    "https://api.dexscreener.com/token-boosts/latest/v1",
+    "https://api.dexscreener.com/token-boosts/top/v1",
+    "https://api.dexscreener.com/community-takeovers/latest/v1",
+]
+
+_discovery_cache = []
+_discovery_updated = 0
+
+
+async def discover_tokens():
+    global _discovery_cache, _discovery_updated
+
+    now = time.time()
+    if now - _discovery_updated < 60:
+        return _discovery_cache
+
+    found = []
+    seen = set()
+
+    async with httpx.AsyncClient(timeout=10.0) as client:
+        for url in DISCOVERY_URLS:
+            try:
+                response = await client.get(url)
+                response.raise_for_status()
+                items = response.json()
+
+                if not isinstance(items, list):
+                    continue
+
+                for item in items:
+                    if not isinstance(item, dict):
+                        continue
+                    if item.get("chainId") != "solana":
+                        continue
+
+                    mint = item.get("tokenAddress")
+                    if not mint or mint in seen:
+                        continue
+
+                    seen.add(mint)
+                    found.append(mint)
+
+            except (httpx.HTTPError, ValueError):
+                continue
+
+    if found:
+        _discovery_cache = found[:60]
+        _discovery_updated = now
+
+    return _discovery_cache
+
+
+async def scan_tokens():
+    mints = await discover_tokens()
+
+    if not mints:
+        return []
+
+    # Rotate through discoveries to cover more tokens.
+    batch_size = 15
+    batch_index = int(time.time() // 20)
+    start = (batch_index * batch_size) % len(mints)
+    selected = [
+        mints[(start + i) % len(mints)]
+        for i in range(min(batch_size, len(mints)))
+    ]
+
+    semaphore = asyncio.Semaphore(5)
+
+    async def fetch(mint):
+        async with semaphore:
+            try:
+                token = await get_token_snapshot(mint)
+                if token:
+                    token["discovery_source"] = "dexscreener"
+                return token
+            except Exception:
+                return None
+
+    results = await asyncio.gather(
+        *(fetch(mint) for mint in selected)
+    )
+
+    return [token for token in results if token]
