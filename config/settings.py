@@ -40,7 +40,7 @@ class Settings:
     tracked_wallets_json: str=os.getenv("TRACKED_WALLETS", "[]")
     jev_api_key: str=os.getenv("JEV_API_KEY","")
     jev_endpoint: str=os.getenv("JEV_ENDPOINT","")
-    jev_timeout_ms: int=_i("JEV_TIMEOUT_MS",1200)
+    jev_timeout_ms: int=_i("JEV_TIMEOUT_MS",10000)
     laya_api_key: str=os.getenv("LAYA_API_KEY","")
     laya_endpoint: str=os.getenv("LAYA_ENDPOINT","")
     laya_timeout_ms: int=_i("LAYA_TIMEOUT_MS",1200)
