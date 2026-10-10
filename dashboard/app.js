@@ -1,1 +1,13 @@
 let V="scan",S={},O=[],T=[];async function load(){[S,O,T]=await Promise.all([fetch("/api/status").then(r=>r.json()),fetch("/api/opportunities").then(r=>r.json()),fetch("/api/trades").then(r=>r.json())]);document.querySelector("#mode").textContent=S.paper_mode?"PAPER":"LIVE";document.querySelector("#balance").textContent=Number(S.balance_sol||0).toFixed(3)+" SOL";document.querySelector("#positions").textContent=(S.open_positions||[]).length;render()}function render(){let c=document.querySelector("#content");if(V==="scan")c.innerHTML='<div class="grid">'+O.map(o=>{let t=o.token||{},e=o.entry||{},f=o.fast||{};return '<div class="card"><h3>$'+(t.symbol||"?")+' <span class="score">'+Math.round(e.combined_score||f.score||0)+'</span></h3><p class="muted">'+(t.name||"")+' • '+(f.provider||"pending")+' • '+((o.route||{}).route||"—")+'</p><p>Liquidity $'+Number(t.liquidity_usd||0).toLocaleString()+' • Vol5m $'+Number(t.volume_5m_usd||0).toLocaleString()+'</p></div>'}).join("")+'</div>';else if(V==="positions")c.innerHTML='<div class="card"><h2>Positions</h2>'+JSON.stringify(S.open_positions||[],null,2)+'</div>';else if(V==="agents")c.innerHTML='<div class="card"><h2>AI Agents</h2><p>Jev primary • Laya fallback • Darwin escalation • Wallet AI • Social AI • Risk AI</p></div>';else if(V==="routes")c.innerHTML='<div class="card"><h2>Execution Routes</h2><p>Pump Direct → PumpSwap/direct DEX → Jupiter fallback → Jito/RPC submission benchmarking later.</p><p class="muted">Live execution is disabled.</p></div>';else c.innerHTML='<div class="card"><h2>Trade History</h2><pre>'+JSON.stringify(T,null,2)+'</pre></div>'}document.querySelectorAll("nav button").forEach(b=>b.onclick=()=>{V=b.dataset.v;render()})}load();setInterval(load,5000);
+async function updateBalance() {
+  try {
+    const r = await fetch('/api/status');
+    const s = await r.json();
+    document.getElementById('balance').textContent =
+      Number(s.balance_sol).toFixed(3) + ' SOL';
+  } catch (e) {
+    console.error('Balance update failed:', e);
+  }
+}
+updateBalance();
+setInterval(updateBalance, 5000);
