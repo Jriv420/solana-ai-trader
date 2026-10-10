@@ -1,128 +1,180 @@
-
-let currentPage = "scan";
-let status = {};
-let opportunities = [];
-let trades = [];
-
+const openDetails = new Set(), walletDetails = new Map(), walletLoading = new Set();
+let currentPage = 'new';
+let searchQuery = '';
+let tokenSort = 'default';
+let walletRegistry = {items:[],status:{}};
+let status = {}, opportunities = [], trades = [], launches = {items:[],feed:{}}, trending = {items:[]}, watched = [];
+let windowSize = '5m', selectedMint = null, details = [], loading = false, refreshError = '';
 async function getData(path) {
-  const response = await fetch(path, { cache: "no-store" });
-  if (!response.ok) {
-    throw new Error(`HTTP ${response.status}`);
-  }
+  const response = await fetch(path, {cache:'no-store'});
+  if (!response.ok) throw new Error(`HTTP ${response.status}`);
   return response.json();
 }
-
 function escapeHtml(value) {
-  return String(value).replace(/[&<>"']/g, char => ({
-    "&": "&amp;",
-    "<": "&lt;",
-    ">": "&gt;",
-    '"': "&quot;",
-    "'": "&#39;"
-  })[char]);
+  return String(value ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 }
-
+function money(value) {
+  if (value == null) return '—';
+  return '$' + Number(value).toLocaleString(undefined,{maximumFractionDigits:2});
+}
+function stamp(value) { return value ? new Date(value*1000).toLocaleString() : '—'; }
+function age(value) {
+  if (value == null) return 'Unknown';
+  const mins = Math.max(0,Math.floor(value));
+  return mins < 60 ? mins+'m' : mins < 1440 ? Math.floor(mins/60)+'h' : Math.floor(mins/1440)+'d';
+}
 async function refreshDashboard() {
+  if (loading) return;
+  loading = true;
   try {
-    status = await getData("/api/status");
-
-    const balance = Number(status.balance_sol);
-    document.getElementById("balance").textContent =
-      Number.isFinite(balance) ? balance.toFixed(3) + " SOL" : "-- SOL";
-
-    document.getElementById("mode").textContent =
-      status.paper_mode ? "PAPER" : "LIVE";
-
-    document.getElementById("positions").textContent =
-      (status.open_positions || []).length;
-  } catch (error) {
-    console.error("Status error:", error);
-  }
-
-  try {
-    opportunities = await getData("/api/opportunities");
-  } catch (error) {
-    console.error("Opportunities error:", error);
-  }
-
-  try {
-    trades = await getData("/api/trades");
-  } catch (error) {
-    console.error("Trades error:", error);
-  }
-
-  render();
+    const results = await Promise.all([getData('/api/status'), getData('/api/opportunities'),
+      getData('/api/trades'),getData('/api/new-pairs'), getData('/api/trending?window='+windowSize), getData('/api/watch-history'),getData('/api/wallets')]);
+    [status,opportunities,trades,launches,trending,watched,walletRegistry] = results;
+    refreshError = '';
+    document.getElementById('balance').textContent = Number(status.balance_sol).toFixed(3)+' SOL';
+    document.getElementById('mode').textContent = status.paper_mode ? 'PAPER':'LIVE';
+    document.getElementById('positions').textContent = (status.open_positions || []).length;
+    if (selectedMint) details = await getData('/api/watch-history?mint='+encodeURIComponent(selectedMint));
+  } catch (error) { refreshError='Update failed ('+error.message+'). Displayed data may be stale.'; }
+  finally { loading=false; render(); }
 }
-
+function compactMoney(value) {
+  if (value == null) return '—';
+  return '$'+Number(value).toLocaleString(undefined,{notation:'compact',maximumFractionDigits:1});
+}
+function imageUrl(value) {
+  try { const u=new URL(value); return u.protocol==='https:' ? u.href : ''; } catch { return ''; }
+}
+function trackedWalletSection(mint, price) {
+  const data=walletDetails.get(mint);
+  if(!data) return '<h4>Tracked wallets holding this coin</h4><p>Open details to check current balances.</p>';
+  const messages={not_configured:'No tracked wallets configured.',rpc_not_configured:'Wallet balance connection is not configured.',invalid_configuration:'Tracked-wallet configuration needs correction.',unavailable:'Wallet balances are currently unavailable.',error:'Could not load wallet balances. Try reopening details.'};
+  let html='<h4>Tracked wallets holding this coin</h4>';
+  if(messages[data.status]) return html+'<p>'+messages[data.status]+'</p>';
+  if(data.status==='loading') return html+'<p>Checking wallet positions…</p>';
+  const holders=data.holders || [];
+  if(!holders.length) html+='<p>'+ (data.status==='partial' ? 'No holdings found among successfully checked wallets.':'None of your tracked wallets currently hold this coin.')+'</p>';
+  else html+='<ul class="wallet-list">'+holders.map(w=>`<li><div><a href="https://solscan.io/account/${encodeURIComponent(w.address)}" target="_blank" rel="noopener noreferrer">${escapeHtml(w.label)}</a><small class="mint">${escapeHtml(w.address)}</small>${w.tags?.length ? `<small>${escapeHtml(w.tags.join(' · '))}</small>`:''}</div><div class="wallet-balance"><strong>${escapeHtml(w.balance)} tokens</strong>${price>0 ? `<small>≈ ${compactMoney(Number(w.balance)*price)}</small>`:''}</div></li>`).join('')+'</ul>';
+  if(data.status==='partial') html+=`<p>${Number(data.configured_count)-Number(data.checked_count)} wallet checks unavailable. Results are incomplete.</p>`;
+  html+=`<p>Checked ${Number(data.checked_count)}/${Number(data.configured_count)} wallets · ${stamp(data.checked_at)}<br>Current on-chain holdings; entry price and profit are not available.</p>`;
+  return html;
+}
+function tokenCard(item, history=false) {
+  const t=item.token || {}, entry=item.entry || {}, fast=item.fast || {};
+  const score=entry.combined_score ?? fast.score;
+  const reasons=[...((item.filter || {}).reasons || []),...(entry.reasons || [])];
+  const symbol=String(t.symbol || '?').replace(/^\$+/, '');
+  const volumeWindow=currentPage==='trending' ? windowSize:'5m';
+  const volume=t[{'5m':'volume_5m_usd','1h':'volume_1h_usd','24h':'volume_24h_usd'}[volumeWindow]];
+  const created=item.created_at || t.created_at;
+  const elapsed=age(created ? (Date.now()/1000-created)/60 : t.age_minutes);
+  const change=t.price_change_5m_pct;
+  const image=imageUrl(t.image_url);
+  const prettyStatus={awaiting_data:'Indexing',watch:'Watching',candidate:'Candidate',rejected:'Filtered'}[item.status] || 'Indexing';
+  return `<article class="coin-card">
+    <div class="coin-top"><div class="coin-heading"><div class="coin-avatar">${image ? `<img src="${escapeHtml(image)}" alt="" loading="lazy" referrerpolicy="no-referrer">`:escapeHtml(symbol.slice(0,1))}</div>
+    <div class="coin-identity"><h3>$${escapeHtml(symbol)}</h3><p class="coin-name">${escapeHtml(t.name)}</p></div></div>
+    <div class="metrics"><div><small>Bot score</small><strong title="Bot setup score out of 100">${score == null ? '—':Math.round(score)+'/100'}</strong></div><div><small>${t.market_cap_is_fdv ? 'FDV':'Market cap'}</small><strong title="${money(t.market_cap_usd)}">${compactMoney(t.market_cap_usd)}</strong></div><div><small>Volume · ${volumeWindow}</small><strong title="${money(volume)}">${compactMoney(volume)}</strong></div></div></div>
+    <div class="coin-bottom"><span class="status-chip">${prettyStatus}${score == null ? ' · Unscored':''}</span><button data-mint="${escapeHtml(t.mint)}">Watch history ↗</button></div>
+    <details class="coin-detail" data-wallet-mint="${escapeHtml(t.mint)}" data-price="${Number(t.price_usd || 0)}" ${openDetails.has(t.mint) ? 'open':''}><summary>Coin details &amp; signals</summary>
+    <p>Liquidity: ${money(t.liquidity_usd)} · ${escapeHtml(elapsed)} ${created ? 'since launch':'pair age'}</p>
+    <p class="${change == null ? 'muted':Number(change)>=0 ? 'positive':'negative'}">5m change: ${change == null ? '—':(Number(change)>=0 ? '+':'')+Number(change).toFixed(1)+'%'}</p>
+    <p>${escapeHtml(fast.provider==='deterministic-fallback' ? 'Rule-based scoring':fast.provider || (item.status==='rejected' ? 'Filtered before scoring':'Awaiting market data'))}</p>
+    ${reasons.length ? `<p>${escapeHtml(reasons.join('; '))}</p>`:''}
+    ${item.trending_score != null ? `<p>Trending score: ${item.trending_score} · Volume/MC: ${Number(item.volume_mc_ratio).toFixed(2)}×</p>`:''}
+    ${t.buys_5m != null ? `<p>5m buys: ${Number(t.buys_5m)} · sells: ${Number(t.sells_5m)}</p>`:''}
+    ${history ? `<p>First seen: ${stamp(item.first_seen)}<br>Last checked: ${stamp(item.last_seen)} · Checks: ${item.observations || 0}</p>`:''}
+    ${t.timestamp ? `<p>Market data: ${stamp(t.timestamp)}</p>`:''}
+    ${t.market_cap_is_fdv ? '<p>FDV shown because market cap is unavailable.</p>':''}
+    <div class="tracked-wallets">${trackedWalletSection(t.mint,Number(t.price_usd || 0))}</div>
+    <p class="mint">${escapeHtml(t.mint)}</p></details>
+  </article>`;
+}
+function cards(items, empty, history=false) {
+  let filtered=items.filter(x=>{const t=x.token || {};return [t.name,t.symbol,t.mint].some(v=>String(v || '').toLowerCase().includes(searchQuery));});
+  const field=tokenSort==='mc' ? 'market_cap_usd':{'5m':'volume_5m_usd','1h':'volume_1h_usd','24h':'volume_24h_usd'}[currentPage==='trending'?windowSize:'5m'];
+  if(tokenSort!=='default' && !(currentPage==='watch' && selectedMint)) filtered=[...filtered].sort((a,b)=>Number(b.token?.[field] || 0)-Number(a.token?.[field] || 0));
+  const count=`<p class="feed-count">${filtered.length} coins${searchQuery ? ' matching your search':''}</p>`;
+  return count+(filtered.length ? '<div class="feed-list">'+filtered.map(x=>tokenCard(x,history)).join('')+'</div>':'<div class="empty">'+escapeHtml(searchQuery ? 'No loaded coins match your search.':empty)+'</div>');
+}
+function feedHeader(title, note, extra='') {
+  return `<div class="feed-header"><div><h2>${title}</h2><p class="muted">${note}</p></div>${extra}</div>`;
+}
+function sortControl() {
+  return `<label>Sort <select id="token-sort">${[['default','Feed order'],['volume','Volume'],['mc','Market cap']].map(([v,n])=>`<option value="${v}" ${tokenSort===v?'selected':''}>${n}</option>`).join('')}</select></label>`;
+}
+function walletRegistryView() {
+  const data=walletRegistry, state=data.status || {};
+  const summary=feedHeader('Tracked wallets',`Discovery: ${escapeHtml(state.discovery || 'starting')} · Learning: ${escapeHtml(state.learning || 'starting')}`);
+  const note=`<p class="muted">Whale = ${compactMoney(data.whale_threshold_usd)} in one coin or ${compactMoney(data.whale_portfolio_usd)} across observed positions. Profitability requires ${Number(data.min_matched_sells || 10)} matched sells across 3+ tokens. Estimates cover observed SOL swaps, not lifetime PnL.</p>`;
+  const items=(data.items || []).filter(w=>[w.address,w.label,...(w.tags || [])].some(v=>String(v).toLowerCase().includes(searchQuery)));
+  return summary+note+(items.length ? items.slice(0,200).map(w=>{
+    const p=w.profile || {};
+    const label=w.disabled ? 'Disabled':w.manual ? 'Manual tracking':w.profitable ? 'Profitable':w.whale ? 'Whale':'Researching';
+    return `<article class="card wallet-profile"><div class="coin-bottom"><strong>${escapeHtml(w.label)}</strong><span class="status-chip">${label}</span></div><p class="mint">${escapeHtml(w.address)}</p><p class="muted">${escapeHtml((w.tags || []).join(' · '))}</p><div class="metrics"><div><small>Observed PnL (SOL)</small><strong>${p.estimated_pnl_sol == null ? '—':Number(p.estimated_pnl_sol).toFixed(3)}</strong></div><div><small>Win rate</small><strong>${p.win_rate_pct == null ? '—':p.win_rate_pct+'%'}</strong></div><div><small>Largest current position</small><strong>${compactMoney(w.largest_position_usd)}</strong></div></div><p class="muted">${Number(p.matched_sells || 0)} matched sells · ${Number(p.distinct_tokens || 0)} tokens · Reputation ${Number(p.score || 0)}/100${p.data_status && p.data_status!=='ok' ? ' · '+escapeHtml(p.data_status):''}</p><p class="muted">Observed portfolio: ${compactMoney(w.observed_portfolio_usd)} (recently scanned coins only)<br>Last evaluated: ${stamp(w.evaluated_at)}</p>${w.disabled ? '<p class="muted">Add this address above to resume manual tracking.</p>':`<button data-remove-wallet="${escapeHtml(w.address)}">Stop tracking</button>`}</article>`;
+  }).join(''):'<div class="empty">Wallets will appear as holders are discovered. You can add one above.</div>');
+}
 function render() {
-  const content = document.getElementById("content");
-
-  if (currentPage === "scan") {
-    content.innerHTML = '<div class="grid">' +
-      opportunities.map(item => {
-        const token = item.token || {};
-        const entry = item.entry || {};
-        const fast = item.fast || {};
-        const score = Number(entry.combined_score || fast.score || 0);
-
-        return `
-          <div class="card">
-            <h3>$${escapeHtml(token.symbol || "?")}
-              <span class="score">${Math.round(score)}</span>
-            </h3>
-            <p class="muted">
-              ${escapeHtml(token.name || "")} ·
-              ${escapeHtml(fast.provider || "pending")} ·
-              ${escapeHtml((item.route || {}).route || "—")}
-            </p>
-            <p>
-              Liquidity: $${Number(token.liquidity_usd || 0).toLocaleString()}
-            </p>
-          </div>
-        `;
-      }).join("") + "</div>";
-
-  } else if (currentPage === "positions") {
-    content.innerHTML = `
-      <div class="card">
-        <h2>Open Positions</h2>
-        <pre>${escapeHtml(JSON.stringify(status.open_positions || [], null, 2))}</pre>
-      </div>
-    `;
-
-  } else if (currentPage === "agents") {
-    content.innerHTML = `
-      <div class="card">
-        <h2>AI Agents</h2>
-        <pre>${escapeHtml(JSON.stringify(status.agents || {}, null, 2))}</pre>
-      </div>
-    `;
-
-  } else if (currentPage === "routes") {
-    content.innerHTML = `
-      <div class="card">
-        <h2>Execution Routes</h2>
-        <p>Pump Direct → PumpSwap → Jupiter fallback</p>
-        <p class="muted">Live trading is not enabled.</p>
-      </div>
-    `;
-
-  } else if (currentPage === "history") {
-    content.innerHTML = `
-      <div class="card">
-        <h2>Trade History</h2>
-        <pre>${escapeHtml(JSON.stringify(trades, null, 2))}</pre>
-      </div>
-    `;
-  }
+  document.getElementById('wallet-manager').hidden=currentPage!=='wallets';
+  document.querySelectorAll('nav button').forEach(b => { const active=b.dataset.v===currentPage; b.classList.toggle('active',active); b.setAttribute('aria-pressed',String(active)); });
+  let html = refreshError ? `<p role="status">${escapeHtml(refreshError)}</p>`:'';
+  if (status.error) html+=`<p role="status">Scanner error: ${escapeHtml(status.error)}</p>`;
+  if (currentPage==='scan') html += feedHeader('Opportunities','Latest scan batch · Scores reflect bot signals.',sortControl())+cards(opportunities,'Waiting for a scan.');
+  else if (currentPage==='new') html += feedHeader('New Pairs',`<span class="feed-dot"></span>${escapeHtml(launches.feed.status || 'connecting')} · Pump.fun launches from the past hour`,sortControl())+cards(launches.items,'Waiting for live launches. Market data appears after indexing.');
+  else if (currentPage==='trending') html += feedHeader('Trending','Volume + market cap · Recently scanned coins',`<label>Window <select id="trend-window">${['5m','1h','24h'].map(x=>`<option value="${x}" ${x===windowSize?'selected':''}>${x}</option>`).join('')}</select></label>`)+cards(trending.items,'Waiting for scanned coins with volume and market cap.')+'<p class="muted feed-count">Ranking: 70% volume + 30% market cap. Covers coins checked in the last 10 minutes.</p>';
+  else if (currentPage==='watch') {
+    html += feedHeader('Watch History','Every discovery, check and filter decision.');
+    if (selectedMint) html += `<div class="card"><button id="back-watch">All watched coins</button><h3 class="mint">${escapeHtml(selectedMint)}</h3><p class="muted">Latest checks first</p></div>`+cards(details,'No scored checks yet; this launch is awaiting indexed market data.');
+    else html += cards(watched,'No coins checked yet.',true);
+  } else if (currentPage==='positions') html += `<div class="card"><h2>Open Positions</h2><pre>${escapeHtml(JSON.stringify(status.open_positions || [],null,2))}</pre></div>`;
+  else if (currentPage==='agents') html += `<div class="card"><h2>AI Agents</h2><pre>${escapeHtml(JSON.stringify(status.agents || {},null,2))}</pre><p class="muted">Wallet and social scores currently use scaffold inputs, not verified live influencer or wallet feeds.</p></div>`;
+  else if (currentPage==='routes') html += '<div class="card"><h2>Execution Routes</h2><p>Pump Direct → PumpSwap → Jupiter fallback</p><p class="muted">Live trading is not enabled.</p></div>';
+  else if (currentPage==='wallets') html += walletRegistryView();
+  else if (currentPage==='history') html += `<div class="card"><h2>Trade History</h2><pre>${escapeHtml(JSON.stringify(trades,null,2))}</pre></div>`;
+  document.getElementById('content').innerHTML = html;
 }
-
-document.querySelectorAll("nav button").forEach(button => {
-  button.addEventListener("click", () => {
-    currentPage = button.dataset.v;
-    render();
-  });
+document.querySelectorAll('nav button').forEach(button => button.addEventListener('click',()=>{currentPage=button.dataset.v;selectedMint=null;tokenSort='default';render();}));
+document.getElementById('content').addEventListener('click',async event=>{
+  const remove=event.target.closest('button[data-remove-wallet]');
+  if(remove) {remove.disabled=true;try {await walletWrite('/api/wallets/'+encodeURIComponent(remove.dataset.removeWallet),'DELETE');walletDetails.clear();await refreshDashboard();} catch(e) {refreshError=e.message;render();} return;}
+  const button=event.target.closest('button[data-mint]');
+  if (button) { selectedMint=button.dataset.mint; currentPage='watch'; details=[]; render(); try { const mint=selectedMint; const result=await getData('/api/watch-history?mint='+encodeURIComponent(mint)); if(selectedMint===mint) {details=result;render();} } catch(e) { refreshError=e.message;render(); } }
+  if (event.target.id==='back-watch') {selectedMint=null;render();}
 });
-
+document.getElementById('content').addEventListener('change',async event=>{
+  if(event.target.id==='token-sort') {tokenSort=event.target.value;render();}
+  if(event.target.id==='trend-window') { windowSize=event.target.value; try { trending=await getData('/api/trending?window='+windowSize);render(); } catch(e) {refreshError=e.message;render();} }
+});
+document.getElementById('content').addEventListener('toggle',async event=>{
+  const detail=event.target;
+  if(detail.tagName!=='DETAILS' || !detail.isConnected || !detail.dataset.walletMint) return;
+  const mint=detail.dataset.walletMint;
+  if(!detail.open) {openDetails.delete(mint);return;}
+  openDetails.add(mint);
+  const cached=walletDetails.get(mint);
+  if(walletLoading.has(mint) || (cached && Date.now()-(cached.loadedAt || 0)<60000)) return;
+  walletLoading.add(mint);walletDetails.set(mint,{status:'loading'});
+  detail.querySelector('.tracked-wallets').innerHTML=trackedWalletSection(mint,Number(detail.dataset.price));
+  try {walletDetails.set(mint,{...await getData('/api/tracked-wallets/'+encodeURIComponent(mint)),loadedAt:Date.now()});}
+  catch {walletDetails.set(mint,{status:'error',loadedAt:Date.now()-60000});}
+  finally {walletLoading.delete(mint);}
+  if(detail.isConnected) detail.querySelector('.tracked-wallets').innerHTML=trackedWalletSection(mint,Number(detail.dataset.price));
+},true);
+document.getElementById('coin-search').addEventListener('input',event=>{searchQuery=event.target.value.trim().toLowerCase();render();});
+document.getElementById('content').addEventListener('error',event=>{if(event.target.tagName==='IMG') event.target.parentElement.textContent='?';},true);
 refreshDashboard();
-setInterval(refreshDashboard, 5000);
+setInterval(refreshDashboard,5000);
+
+async function walletWrite(path,method,body) {
+  const response=await fetch(path,{method,headers:{'Content-Type':'application/json'},body:body ? JSON.stringify(body):undefined});
+  const data=await response.json();
+  if(!response.ok) throw new Error(typeof data.detail==='string' ? data.detail:'Could not save wallet. Check the address.');
+  return data;
+}
+document.getElementById('wallet-form').addEventListener('submit',async event=>{
+  event.preventDefault();const button=event.target.querySelector('button'),message=document.getElementById('wallet-form-message');
+  button.disabled=true;message.textContent='Saving…';
+  try {await walletWrite('/api/wallets','POST',{address:document.getElementById('wallet-address').value.trim(),label:document.getElementById('wallet-label').value.trim()});walletDetails.clear();message.textContent='Wallet added. Positions will appear in coin details.';event.target.reset();walletRegistry=await getData('/api/wallets');render();}
+  catch(e) {message.textContent=e.message;}
+  finally {button.disabled=false;}
+});
