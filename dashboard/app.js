@@ -1,13 +1,128 @@
-let V="scan",S={},O=[],T=[];async function load(){[S,O,T]=await Promise.all([fetch("/api/status").then(r=>r.json()),fetch("/api/opportunities").then(r=>r.json()),fetch("/api/trades").then(r=>r.json())]);document.querySelector("#mode").textContent=S.paper_mode?"PAPER":"LIVE";document.querySelector("#balance").textContent=Number(S.balance_sol||0).toFixed(3)+" SOL";document.querySelector("#positions").textContent=(S.open_positions||[]).length;render()}function render(){let c=document.querySelector("#content");if(V==="scan")c.innerHTML='<div class="grid">'+O.map(o=>{let t=o.token||{},e=o.entry||{},f=o.fast||{};return '<div class="card"><h3>$'+(t.symbol||"?")+' <span class="score">'+Math.round(e.combined_score||f.score||0)+'</span></h3><p class="muted">'+(t.name||"")+' • '+(f.provider||"pending")+' • '+((o.route||{}).route||"—")+'</p><p>Liquidity $'+Number(t.liquidity_usd||0).toLocaleString()+' • Vol5m $'+Number(t.volume_5m_usd||0).toLocaleString()+'</p></div>'}).join("")+'</div>';else if(V==="positions")c.innerHTML='<div class="card"><h2>Positions</h2>'+JSON.stringify(S.open_positions||[],null,2)+'</div>';else if(V==="agents")c.innerHTML='<div class="card"><h2>AI Agents</h2><p>Jev primary • Laya fallback • Darwin escalation • Wallet AI • Social AI • Risk AI</p></div>';else if(V==="routes")c.innerHTML='<div class="card"><h2>Execution Routes</h2><p>Pump Direct → PumpSwap/direct DEX → Jupiter fallback → Jito/RPC submission benchmarking later.</p><p class="muted">Live execution is disabled.</p></div>';else c.innerHTML='<div class="card"><h2>Trade History</h2><pre>'+JSON.stringify(T,null,2)+'</pre></div>'}document.querySelectorAll("nav button").forEach(b=>b.onclick=()=>{V=b.dataset.v;render()})}load();setInterval(load,5000);
-async function updateBalance() {
+
+let currentPage = "scan";
+let status = {};
+let opportunities = [];
+let trades = [];
+
+async function getData(path) {
+  const response = await fetch(path, { cache: "no-store" });
+  if (!response.ok) {
+    throw new Error(`HTTP ${response.status}`);
+  }
+  return response.json();
+}
+
+function escapeHtml(value) {
+  return String(value).replace(/[&<>"']/g, char => ({
+    "&": "&amp;",
+    "<": "&lt;",
+    ">": "&gt;",
+    '"': "&quot;",
+    "'": "&#39;"
+  })[char]);
+}
+
+async function refreshDashboard() {
   try {
-    const r = await fetch('/api/status');
-    const s = await r.json();
-    document.getElementById('balance').textContent =
-      Number(s.balance_sol).toFixed(3) + ' SOL';
-  } catch (e) {
-    console.error('Balance update failed:', e);
+    status = await getData("/api/status");
+
+    const balance = Number(status.balance_sol);
+    document.getElementById("balance").textContent =
+      Number.isFinite(balance) ? balance.toFixed(3) + " SOL" : "-- SOL";
+
+    document.getElementById("mode").textContent =
+      status.paper_mode ? "PAPER" : "LIVE";
+
+    document.getElementById("positions").textContent =
+      (status.open_positions || []).length;
+  } catch (error) {
+    console.error("Status error:", error);
+  }
+
+  try {
+    opportunities = await getData("/api/opportunities");
+  } catch (error) {
+    console.error("Opportunities error:", error);
+  }
+
+  try {
+    trades = await getData("/api/trades");
+  } catch (error) {
+    console.error("Trades error:", error);
+  }
+
+  render();
+}
+
+function render() {
+  const content = document.getElementById("content");
+
+  if (currentPage === "scan") {
+    content.innerHTML = '<div class="grid">' +
+      opportunities.map(item => {
+        const token = item.token || {};
+        const entry = item.entry || {};
+        const fast = item.fast || {};
+        const score = Number(entry.combined_score || fast.score || 0);
+
+        return `
+          <div class="card">
+            <h3>$${escapeHtml(token.symbol || "?")}
+              <span class="score">${Math.round(score)}</span>
+            </h3>
+            <p class="muted">
+              ${escapeHtml(token.name || "")} ·
+              ${escapeHtml(fast.provider || "pending")} ·
+              ${escapeHtml((item.route || {}).route || "—")}
+            </p>
+            <p>
+              Liquidity: $${Number(token.liquidity_usd || 0).toLocaleString()}
+            </p>
+          </div>
+        `;
+      }).join("") + "</div>";
+
+  } else if (currentPage === "positions") {
+    content.innerHTML = `
+      <div class="card">
+        <h2>Open Positions</h2>
+        <pre>${escapeHtml(JSON.stringify(status.open_positions || [], null, 2))}</pre>
+      </div>
+    `;
+
+  } else if (currentPage === "agents") {
+    content.innerHTML = `
+      <div class="card">
+        <h2>AI Agents</h2>
+        <pre>${escapeHtml(JSON.stringify(status.agents || {}, null, 2))}</pre>
+      </div>
+    `;
+
+  } else if (currentPage === "routes") {
+    content.innerHTML = `
+      <div class="card">
+        <h2>Execution Routes</h2>
+        <p>Pump Direct → PumpSwap → Jupiter fallback</p>
+        <p class="muted">Live trading is not enabled.</p>
+      </div>
+    `;
+
+  } else if (currentPage === "history") {
+    content.innerHTML = `
+      <div class="card">
+        <h2>Trade History</h2>
+        <pre>${escapeHtml(JSON.stringify(trades, null, 2))}</pre>
+      </div>
+    `;
   }
 }
-updateBalance();
-setInterval(updateBalance, 5000);
+
+document.querySelectorAll("nav button").forEach(button => {
+  button.addEventListener("click", () => {
+    currentPage = button.dataset.v;
+    render();
+  });
+});
+
+refreshDashboard();
+setInterval(refreshDashboard, 5000);
