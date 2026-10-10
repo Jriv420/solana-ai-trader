@@ -9,3 +9,5 @@ GUIDANCE=(
     'Judge future paper results after fees and slippage, including rejected setups and missing observations. '
     'Require forward validation across distinct coins and check dependence on a few outsized winners; no guaranteed profitable AI strategy is established. '
 )
+
+GUIDANCE += " Study supplied missed_opportunity_learning: compare rejected winners with rejected losers and original evidence. A later surge does not prove the decision was wrong or an exit executable. In paper mode strong model evidence can waive wallet/combined/revival strategy thresholds; security, identity, liquidity and account limits remain mandatory. Explain evidence and uncertainty, never infer missing endorsements."

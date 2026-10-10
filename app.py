@@ -13,6 +13,8 @@ from data.social_data import get_social_snapshot, social_loop, STATUS as SOCIAL_
 from data.market_data import get_sol_price
 from data.wallet_signals import wallet_signals_loop
 from database.research import research
+from database.missed import missed
+from strategy.paper_exception import eligible as exception_eligible, decide as exception_decide
 from intelligence.narrative import context as narrative_context
 from data.security_research import security_loop, STATUS as SECURITY_STATUS
 from typing import Literal
@@ -43,15 +45,25 @@ async def analyze(t):
     t.update(wallet_context=w,social_context=social_evidence)
     f=evaluate_token(t)
     t['setup_type']=f['mode']
-    if not f["pass"]:return {"token":t,"status":"rejected","filter":f}
-    # Spend model calls on setups that can pass the independent wallet gate.
-    fast=await evaluate_fast(t) if w['score']>=settings.min_wallet_score else dict(_fallback(t),reason='Awaiting qualified wallet evidence before paid AI escalation')
+    t['missed_opportunity_learning']=STATE.get('missed_learning',{})
+    discretionary=exception_eligible(t,f)
+    if not f["pass"] and not discretionary:
+        missed.observe(t,f['reasons'])
+        return {"token":t,"status":"rejected","filter":f}
+    # Bound exploratory reviews to one per minute; normal qualified reviews keep their existing limits.
+    explore=discretionary and time.time()-STATE.get('last_exception_review',0)>=60
+    if explore:STATE['last_exception_review']=time.time()
+    fast=await evaluate_fast(t) if w['score']>=settings.min_wallet_score or explore else dict(_fallback(t),reason='Awaiting qualified wallet evidence before paid AI escalation')
     STATE['agents'][fast['provider']]='active'
     STATE['agents']['wallet_ai']=w['status']
     STATE['agents']['social_ai']=social_evidence.get('status','unknown')
     s=score_social_context(social_evidence);r=score_contextual_risk(t)
     e=should_enter(t,float(fast["score"]),float(w["score"]),float(s["score"]),float(r["score"]))
-    o={"token":t,"fast":fast,"wallet":w,"social":s,"risk":r,"entry":e,"route":choose_route(t),"status":"candidate" if e["enter"] else "watch"}
+    waived=exception_decide(t,f,e,fast,r['score']) if not f['pass'] or not e['enter'] else {'allowed':False}
+    missed.observe(t,f['reasons']+e['reasons'])
+    if waived['allowed']:e=dict(e,enter=True,paper_exception=waived)
+    elif not f['pass']:e=dict(e,enter=False,reasons=f['reasons']+e['reasons'])
+    o={"filter":f,"token":t,"fast":fast,"wallet":w,"social":s,"risk":r,"entry":e,"route":choose_route(t),"status":"candidate" if e["enter"] else "watch" if f["pass"] else "rejected"}
     if e["enter"] and settings.paper_mode:
         existing={p["mint"] for p in paper_trader.open_positions()}
         if t["mint"] not in existing:
@@ -78,6 +90,7 @@ async def loop():
                     store.mark_peak(position['id'],token.get('price_usd') or 0)
                     decision=should_exit(position,token)
                     if decision['exit']:paper_trader.sell(position,token,decision['reason'])
+            STATE["missed_learning"]=missed.summary()
             observations=[]
             semaphore=asyncio.Semaphore(4)
             async def evaluate(t):
@@ -110,10 +123,12 @@ async def life(app):
 app=FastAPI(lifespan=life)
 D=Path(__file__).resolve().parent/"dashboard"
 app.mount("/static",StaticFiles(directory=D),name="static")
+@app.get("/healthz")
+def healthz():return {"ready":True}
 @app.get("/")
 async def home():return FileResponse(D/"index.html")
 @app.get("/api/status")
-async def status():return {"paper_mode":settings.paper_mode,"balance_sol":paper_trader.balance_sol(),"open_positions":paper_trader.open_positions(),"agents":STATE["agents"],"error":STATE.get("error"),"new_pairs_feed":dict(FEED),"paper_metrics":store.paper_metrics(),"scan":STATE.get("scan"),"scan_started_at":STATE.get("scan_started_at")}
+async def status():return {"paper_mode":settings.paper_mode,"balance_sol":paper_trader.balance_sol(),"open_positions":paper_trader.open_positions(),"agents":STATE["agents"],"error":STATE.get("error"),"new_pairs_feed":dict(FEED),"paper_metrics":store.paper_metrics(),"missed_learning":STATE.get("missed_learning",{}),"scan":STATE.get("scan"),"scan_started_at":STATE.get("scan_started_at")}
 @app.get("/api/opportunities")
 async def opps():return STATE["opportunities"]
 @app.get("/api/trades")

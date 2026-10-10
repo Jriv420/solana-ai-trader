@@ -20,6 +20,8 @@ class NarrativeResearch(unittest.TestCase):
     def setUp(self):
         self.tmp=tempfile.TemporaryDirectory();self.patch=patch.object(db,'DB',Path(self.tmp.name)/'db.sqlite3');self.patch.start()
         Store().ensure_observations();research.ensure()
+        from database.missed import missed
+        missed.ensure()
         from database.wallet_registry import wallet_registry
         wallet_registry.ensure()
         from data.social_data import ensure
