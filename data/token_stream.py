@@ -19,6 +19,7 @@ DISCOVERY_URLS = [
 FEED = {'status': 'connecting', 'last_event': None, 'error': None}
 _recent = OrderedDict()
 _discovery_cache = []
+_discovery_images = {}
 _discovery_updated = 0
 _cursor = 0
 _new_cursor = 0
@@ -64,10 +65,11 @@ async def stream_new_tokens():
             delay = min(delay * 2, 60)
 
 async def discover_tokens():
-    global _discovery_cache, _discovery_updated
+    global _discovery_cache, _discovery_images, _discovery_updated
     if time.time() - _discovery_updated < 60:
         return _discovery_cache
     found = []
+    images = {}
     async with httpx.AsyncClient(timeout=10) as client:
         for url in DISCOVERY_URLS:
             try:
@@ -75,6 +77,11 @@ async def discover_tokens():
                 response.raise_for_status()
                 items = response.json()
                 if isinstance(items, list):
+                    for item in items:
+                        if isinstance(item,dict) and item.get('chainId')=='solana' and item.get('tokenAddress'):
+                            icon=item.get('icon')
+                            if isinstance(icon,str) and icon.startswith('https://') and len(icon)<=2048:
+                                images[item['tokenAddress']]=icon
                     found.extend(item['tokenAddress'] for item in items
                                  if isinstance(item, dict) and item.get('chainId') == 'solana'
                                  and item.get('tokenAddress'))
@@ -83,6 +90,7 @@ async def discover_tokens():
     _discovery_updated = time.time()
     if found:
         _discovery_cache = list(dict.fromkeys(found))[:120]
+        _discovery_images = {mint:images.get(mint) or _discovery_images.get(mint) for mint in _discovery_cache}
     return _discovery_cache
 
 async def scan_tokens():
@@ -105,6 +113,7 @@ async def scan_tokens():
             try:
                 token = await get_token_snapshot(mint)
                 if token:
+                    token['image_url']=token.get('image_url') or _discovery_images.get(mint)
                     token['discovery_source'] = 'pumpportal-new-token' if mint in _recent else 'dexscreener'
                     if mint in _recent:
                         token['created_at'] = _recent[mint]['created_at']
