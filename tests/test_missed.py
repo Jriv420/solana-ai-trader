@@ -34,6 +34,6 @@ class MissedTests(unittest.TestCase):
             self.assertFalse(decide(token,f,e,{'provider':'jev','score':75},100)['allowed'])
             for security in ({'status':'pending'},{'status':'ok','danger':True}):
                 self.assertFalse(eligible(dict(token,research={'security':security}),f))
-            self.assertFalse(eligible(dict(token,identity_check={'status':'ambiguous'}),f))
+            self.assertTrue(eligible(dict(token,identity_check={'status':'ambiguous'}),f))
             self.assertFalse(eligible(dict(token,liquidity_usd=10),f))
         with patch('strategy.paper_exception.settings',replace(settings,paper_mode=False)):self.assertFalse(eligible(token,f))

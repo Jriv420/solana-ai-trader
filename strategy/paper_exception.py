@@ -7,7 +7,6 @@ def eligible(token,filtered):
     security=(token.get('research') or {}).get('security',{})
     price=float(token.get('price_usd') or 0);li=float(token.get('liquidity_usd') or 0)
     return (rules.paper_mode and security.get('status')=='ok' and not security.get('danger')
-        and (token.get('identity_check') or {}).get('status')!='ambiguous'
         and not token.get('error') and math.isfinite(price) and price>0
         and math.isfinite(li) and li>=rules.min_liquidity_usd
         and float(token.get('volume_5m_usd') or 0)>=1000

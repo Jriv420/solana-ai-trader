@@ -57,7 +57,7 @@ def context(mint,token=None):
     if token is None:
         observations=store.watch_history(mint=mint,limit=1)
         token=observations[0]['token'] if observations else None
-    if token is not None:features.update(market_features(token,security),bundle_status=bundle['status'])
+    if token is not None:features.update(market_features(token,security),bundle_status=bundle['status'],branding_status=(token.get('identity_check') or {}).get('status','unknown'))
     learning=research.learning(features)
     outcomes_by_horizon={h:research.learning(features,h) for h in ('5m','1h','24h')}
     return {'claims':reviews,'events':events[:30],'security':security,'bundle':bundle,'features':features,'learning':learning,'outcomes_by_horizon':outcomes_by_horizon,'message':'User-reviewed source claims, not automatically authenticated endorsements. Token receipts may be unsolicited gifts or other transfers.'}

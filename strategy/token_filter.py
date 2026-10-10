@@ -5,7 +5,6 @@ def evaluate_token(t):
     rules=trading_settings(settings)
     r=[];li=float(t.get('liquidity_usd') or 0);age=t.get('age_minutes');price=float(t.get('price_usd') or 0)
     if t.get('error'):r.append('market data unavailable')
-    if (t.get('identity_check') or {}).get('status')=='ambiguous':r.append('lookalike contracts: same name and ticker; original unverified')
     if not math.isfinite(li) or li<rules.min_liquidity_usd:r.append('liquidity below hard minimum')
     if not math.isfinite(price) or price<=0:r.append('price unavailable')
     research=t.get('research')
