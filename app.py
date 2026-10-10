@@ -60,3 +60,40 @@ async def status():return {"paper_mode":settings.paper_mode,"balance_sol":paper_
 async def opps():return STATE["opportunities"]
 @app.get("/api/trades")
 async def trades():return store.all()
+import os
+import base64
+import secrets
+from fastapi import Request
+from fastapi.responses import Response
+
+@app.middleware("http")
+async def nexus_security(request: Request, call_next):
+    password = os.getenv("NEXUS_PASSWORD")
+
+    if not password:
+        return Response("NEXUS password not configured", status_code=503)
+
+    authorization = request.headers.get("Authorization", "")
+    valid = False
+
+    if authorization.startswith("Basic "):
+        try:
+            encoded = authorization.split(" ", 1)[1]
+            decoded = base64.b64decode(encoded).decode()
+            username, supplied_password = decoded.split(":", 1)
+
+            valid = (
+                secrets.compare_digest(username, "nexus")
+                and secrets.compare_digest(supplied_password, password)
+            )
+        except (ValueError, UnicodeDecodeError):
+            pass
+
+    if not valid:
+        return Response(
+            "Login required",
+            status_code=401,
+            headers={"WWW-Authenticate": 'Basic realm="NEXUS"'}
+        )
+
+    return await call_next(request)
