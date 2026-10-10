@@ -11,6 +11,22 @@ class Store:
     def conn(self):
         DB.parent.mkdir(parents=True,exist_ok=True)
         c=sqlite3.connect(DB,timeout=15);c.row_factory=sqlite3.Row;return c
+    def ai_request_count(self,provider,day):
+        with self.conn() as c:
+            c.execute('CREATE TABLE IF NOT EXISTS ai_requests(provider TEXT,day TEXT,attempts INTEGER,PRIMARY KEY(provider,day))')
+            r=c.execute('SELECT attempts FROM ai_requests WHERE provider=? AND day=?',(provider,day)).fetchone()
+        return r['attempts'] if r else 0
+    def reserve_ai_request(self,provider,day,limit):
+        # Count before sending, including failed requests and manual connection tests.
+        with self.conn() as c:
+            c.execute('CREATE TABLE IF NOT EXISTS ai_requests(provider TEXT,day TEXT,attempts INTEGER,PRIMARY KEY(provider,day))')
+            c.execute('BEGIN IMMEDIATE')
+            c.execute('INSERT OR IGNORE INTO ai_requests VALUES(?,?,0)',(provider,day))
+            used=c.execute('SELECT attempts FROM ai_requests WHERE provider=? AND day=?',(provider,day)).fetchone()['attempts']
+            if used>=max(0,limit):return False
+            c.execute('UPDATE ai_requests SET attempts=attempts+1 WHERE provider=? AND day=?',(provider,day))
+            c.execute('DELETE FROM ai_requests WHERE day<?',(day[:4]+'-01-01',))
+        return True
     def row(self,r):
         x=dict(r);raw=x.pop("context_json",None);x["context"]=json.loads(raw) if raw else {};return x
     def create_trade(self,t):

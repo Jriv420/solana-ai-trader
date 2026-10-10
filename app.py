@@ -153,10 +153,13 @@ def connection_summary():
     mount=os.getenv('RAILWAY_VOLUME_MOUNT_PATH')
     persistent=bool(mount and DB.resolve().is_relative_to(Path(mount).resolve()))
     models={}
-    for provider in ('jev','laya','darwin'):
+    for provider in ('jev','laya','darwin','openai'):
         configured=bool(getattr(settings,provider+'_api_key') and getattr(settings,provider+'_endpoint'))
         models[provider]=dict(CONNECTIONS.get(provider,{}),configured=configured)
         models[provider].setdefault('status','configured_untested' if configured else 'not_configured')
+        if provider=='openai':
+            from intelligence.openai_review import usage
+            models[provider].update(usage())
     return {'models':models,'rpc':{'configured':bool(settings.solana_rpc_url),'status':WALLET_STATUS['discovery']},'helius':{'configured':bool(settings.helius_api_key),'status':WALLET_STATUS['learning']},'x':dict(SOCIAL_STATUS,configured=bool(settings.x_bearer_token)),'rugcheck':dict(SECURITY_STATUS),'storage':{'railway_volume_detected':persistent,'db_path':str(DB),'message':'Volume detected; verify memory survives a restart.' if persistent else 'Persistent Railway volume not detected; learning may reset on deployment.'},'paper_mode':settings.paper_mode,'live_execution_enabled':False}
 @app.get('/api/connections')
 async def connections():return connection_summary()
@@ -166,7 +169,7 @@ async def test_connections(request: Request):
     now=time.time()
     if now-STATE.get('last_connection_test',0)<60:raise HTTPException(status_code=429,detail='Wait a minute before testing again')
     STATE['last_connection_test']=now
-    for provider in ('jev','laya','darwin'):
+    for provider in ('jev','laya','darwin','openai'):
         await provider_result(provider,{'connection_test':True,'message':'Return a numeric score of 50. No trading decision.'})
     return connection_summary()
 
