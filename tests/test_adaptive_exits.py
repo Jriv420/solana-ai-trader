@@ -52,6 +52,25 @@ class AdaptiveExits(unittest.IsolatedAsyncioTestCase):
                 self.assertFalse((await ai.decide(self.book,self.book.open()[0],token))['exit'])
         self.assertAlmostEqual(sum(r['amount_sol'] for r in self.book.all()),.1)
 
+    def test_position_history_keeps_partial_fills_and_weighted_average(self):
+        p=self.book.open()[0]
+        self.assertTrue(self.trader.sell(p,dict(self.t,price_usd=4,market_cap_usd=160000),'trim',.25))
+        remaining=self.book.open()[0]
+        self.assertTrue(self.trader.sell(remaining,dict(self.t,price_usd=1,market_cap_usd=40000),'final'))
+        h=self.book.position_history(limit=1)[0]['position_history']
+        self.assertEqual(len(h['fills']),2)
+        self.assertAlmostEqual(h['original_amount_sol'],.1)
+        self.assertEqual(h['remaining_amount_sol'],0)
+        self.assertAlmostEqual(h['average_sell_market_cap_usd'],70000)
+        self.assertAlmostEqual(h['realized_net_pnl_sol'],sum(x['pnl_sol'] for x in self.book.all()))
+        self.assertGreater(h['realized_net_pnl_sol'],0)
+        self.assertLess(h['fills'][-1]['pnl_sol'],0)
+        self.assertEqual(len(self.book.position_history()),1)
+        # Account boundaries remain intact, and missing caps never become invented averages.
+        self.assertEqual(Store('trades').position_history(),[])
+        with self.book.conn() as c:c.execute('UPDATE shadow_trades SET exit_market_cap_usd=NULL WHERE id=?',(h['fills'][0]['id'],))
+        self.assertIsNone(self.book.position_history()[0]['position_history']['average_sell_market_cap_usd'])
+
     def test_calculated_metrics_include_costs_and_handle_missing_prices(self):
         p=dict(self.book.open()[0],peak_price_usd=2.5)
         m=ai.calculated_metrics(p,dict(self.t,price_usd=2))
