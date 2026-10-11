@@ -60,6 +60,7 @@ class Settings:
     darwin_timeout_ms: int=_i("DARWIN_TIMEOUT_MS",5000)
     paper_starting_sol: float=_f("PAPER_STARTING_SOL",10)
     default_buy_sol: float=_f("DEFAULT_BUY_SOL",0.05)
+    paper_min_buy_sol: float=_f("PAPER_MIN_BUY_SOL",0.05)
     max_trade_sol: float=_f("MAX_TRADE_SOL",0.10)
     max_open_positions: int=_i("MAX_OPEN_POSITIONS",5)
     max_daily_loss_sol: float=_f("MAX_DAILY_LOSS_SOL",0.50)
@@ -82,8 +83,8 @@ def trading_settings(base=None,now=None):
     return replace(base,min_liquidity_usd=min(base.min_liquidity_usd,5000),
         min_combined_score=min(base.min_combined_score,60),min_wallet_score=min(base.min_wallet_score,40),
         max_risk_score=max(base.max_risk_score,75),revival_min_volume_5m_usd=min(base.revival_min_volume_5m_usd,2000),
-        revival_volume_ratio=min(base.revival_volume_ratio,1.5),default_buy_sol=min(base.default_buy_sol,.025),
-        max_trade_sol=min(base.max_trade_sol,.025),max_open_positions=min(base.max_open_positions,3),
+        revival_volume_ratio=min(base.revival_volume_ratio,1.5),default_buy_sol=min(base.default_buy_sol,.1),
+        max_trade_sol=min(base.max_trade_sol,.1),max_open_positions=min(base.max_open_positions,3),
         max_daily_loss_sol=min(base.max_daily_loss_sol,.15))
 
 def risk_trial_status(now=None):
