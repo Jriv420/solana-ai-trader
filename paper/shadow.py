@@ -1,7 +1,7 @@
 """An isolated, deterministic aggressive paper benchmark; never a live order."""
 import math,time
 from collections import Counter
-from config.settings import settings,risk_trial_status,daily_loss_limit_enabled,paper_test_until
+from config.settings import settings,risk_trial_status,daily_loss_limit_enabled,paper_test_until,paper_continuous
 from database.store import Store,store
 from paper.paper_trader import PaperTrader
 from strategy.exit import should_exit
@@ -19,7 +19,9 @@ def initialize():
         c.execute('CREATE TABLE IF NOT EXISTS shadow_meta(id INTEGER PRIMARY KEY,started_at REAL,ends_at REAL)')
         c.execute('INSERT OR IGNORE INTO shadow_meta VALUES(1,?,?)',(time.time(),risk_trial_status()['ends_at'] or time.time()+86400))
         until=paper_test_until()
-        if until:c.execute('UPDATE shadow_meta SET ends_at=? WHERE id=1',(until,))
+        if paper_continuous():c.execute('UPDATE shadow_meta SET ends_at=NULL WHERE id=1')
+        elif until:c.execute('UPDATE shadow_meta SET ends_at=? WHERE id=1',(until,))
+        else:c.execute('UPDATE shadow_meta SET ends_at=? WHERE id=1 AND ends_at IS NULL',(time.time()+86400,))
         return dict(c.execute('SELECT * FROM shadow_meta WHERE id=1').fetchone())
 
 def eligible(t,now=None):
@@ -69,7 +71,7 @@ def step(observations,process_exits=True):
         d=should_exit(p,t)
         if d['exit']:TRADER.sell(p,t,d['reason'],fraction=d.get('fraction',1))
     blockers=Counter();buys=0
-    active=settings.paper_mode and now<meta['ends_at']
+    active=settings.paper_mode and (meta['ends_at'] is None or now<meta['ends_at'])
     daily=BOOK.daily_realized(now)
     pause=[]
     if not settings.paper_mode:pause.append('Paper trading disabled')
@@ -106,9 +108,9 @@ def step(observations,process_exits=True):
             amount=position_size_sol(strength,TRADER.balance_sol())
             if amount>0 and TRADER.buy(t,amount,{'strategy':'aggressive momentum with model team review','entry_team':team,'entry_evidence':t,'rules':{'min_liquidity':5000,'min_volume_5m':2000,'min_change_5m':5,'buys_over_sells':True,'wallet_or_ai_required':False}}):buys+=1
             else:blockers['balance or fresh fill unavailable']+=1
-    STATE.update(active=active,paper_buys=buys,blockers=dict(blockers),checked_at=now,entry_pause_reasons=pause,daily_realized_sol=daily,daily_loss_limit_sol=.15,daily_loss_limit_enabled=loss_enabled,daily_limit_resets_at=(int(now//86400)+1)*86400)
+    STATE.update(active=active,continuous=meta['ends_at'] is None,ends_at=meta['ends_at'],paper_buys=buys,blockers=dict(blockers),checked_at=now,entry_pause_reasons=pause,daily_realized_sol=daily,daily_loss_limit_sol=.15,daily_loss_limit_enabled=loss_enabled,daily_limit_resets_at=(int(now//86400)+1)*86400)
     return dict(STATE)
 
 def summary():
     meta=initialize();history=BOOK.position_history()
-    return dict(STATE,active=settings.paper_mode and time.time()<meta['ends_at'],started_at=meta['started_at'],ends_at=meta['ends_at'],balance_sol=TRADER.balance_sol(),min_buy_sol=settings.paper_min_buy_sol,max_buy_sol=min(settings.default_buy_sol,settings.max_trade_sol),metrics=BOOK.paper_metrics(),positions=[p for p in history if p['status']=='open'],trades=history,scope='Separate simulated account. Momentum entries with outcome-based paper entry restrictions and AI-reviewed exits. Estimated fees and slippage; protective limits and explicit rule fallbacks remain.')
+    return dict(STATE,active=settings.paper_mode and (meta['ends_at'] is None or time.time()<meta['ends_at']),continuous=meta['ends_at'] is None,started_at=meta['started_at'],ends_at=meta['ends_at'],balance_sol=TRADER.balance_sol(),min_buy_sol=settings.paper_min_buy_sol,max_buy_sol=min(settings.default_buy_sol,settings.max_trade_sol),metrics=BOOK.paper_metrics(),positions=[p for p in history if p['status']=='open'],trades=history,scope='Separate simulated account. Momentum entries with outcome-based paper entry restrictions and AI-reviewed exits. Estimated fees and slippage; protective limits and explicit rule fallbacks remain.')

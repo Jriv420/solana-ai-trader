@@ -238,6 +238,9 @@ def connection_summary():
         from intelligence.model_team import STATUS as TEAM_STATUS
         models[provider]=dict(TEAM_STATUS.get(provider) or CONNECTIONS.get(provider,{}),configured=configured,key_present=bool(getattr(settings,provider+'_api_key')),endpoint_present=bool(getattr(settings,provider+'_endpoint')))
         models[provider].setdefault('status','configured_untested' if configured else 'not_configured')
+        if provider=='jev':
+            from datetime import datetime,timezone
+            models[provider].update(exit_requests_today=store.ai_request_count('jev_exit',datetime.now(timezone.utc).date().isoformat()),daily_exit_limit=settings.jev_exit_daily_limit)
         if provider=='openai':
             from intelligence.openai_review import usage
             models[provider].update(usage())

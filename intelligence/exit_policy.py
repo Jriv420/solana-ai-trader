@@ -8,7 +8,7 @@ from intelligence.jev import ask_jev
 from intelligence.gemini_review import ask_gemini
 
 INTERVAL=120
-DAILY_JEV_LIMIT=300
+DAILY_JEV_LIMIT=settings.jev_exit_daily_limit
 FACTOR_QUESTIONS={
     'participation': 'Does supplied recent buy/sell flow and liquidity support continued participation?',
     'activity_quality': 'Does supplied activity evidence corroborate genuine participation rather than suspected artificial activity?',

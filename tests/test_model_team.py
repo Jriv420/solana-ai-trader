@@ -56,6 +56,23 @@ class ModelTeam(unittest.IsolatedAsyncioTestCase):
             await shadow.prepare_entries(obs);d=shadow.step(obs,process_exits=False)
             self.assertEqual(d['paper_buys'],0);call.assert_awaited_once();self.assertIn('model team entry evidence below 50',d['blockers'])
             self.assertEqual(call.call_args.args[0]['book'],'shadow_trades')
+    def test_continuous_paper_mode_survives_expired_deadline_and_restart(self):
+        import os
+        from paper import shadow
+        import config.settings as config
+        with patch.dict(os.environ,{'PAPER_CONTINUOUS':'true','PAPER_TEST_UNTIL':'1'}),patch.object(config,'settings',self.cfg),patch.object(shadow,'settings',self.cfg),patch.object(shadow,'BOOK',self.book),patch.object(shadow,'TRADER',PaperTrader(self.book)):
+            self.assertIsNone(shadow.initialize()['ends_at'])
+            self.assertIsNone(shadow.initialize()['ends_at'])
+            self.assertTrue(shadow.step([],process_exits=False)['active'])
+            self.assertTrue(shadow.summary()['continuous'])
+    async def test_increased_exit_budget_preserves_existing_daily_counter(self):
+        db.store.reserve_ai_request('jev_exit','2000-01-01',1)
+        from datetime import datetime,timezone
+        day=datetime.now(timezone.utc).date().isoformat()
+        with db.store.conn() as c:c.execute('INSERT OR REPLACE INTO ai_requests VALUES(?,?,?)',('jev_exit',day,300))
+        with patch.object(team,'settings',replace(self.cfg,jev_exit_daily_limit=6000)):
+            r=await team.review('jev',{'task':'paper_exit','mint':'budget','position':{'id':1}},'exit',AsyncMock(return_value={'action':'hold','reason':'Flow stable'}))
+        self.assertEqual(r['status'],'verified_response');self.assertEqual(db.store.ai_request_count('jev_exit',day),301)
     async def test_disabled_and_key_without_endpoint_are_never_called(self):
         with patch.object(team,'settings',replace(self.cfg,darwin_endpoint='')),patch.object(team,'ask_darwin',AsyncMock()) as call:
             r=await team.review('darwin',{},'entry');self.assertEqual(r['status'],'not_configured');call.assert_not_awaited()
