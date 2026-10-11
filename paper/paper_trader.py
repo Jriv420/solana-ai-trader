@@ -16,7 +16,7 @@ class PaperTrader:
         execution=price*(1+slip);notional=a/(1+fee)
         fill={'version':1,'entry_sol_price_usd':sol_usd,'quantity':notional*sol_usd/execution,'entry_fee_sol':a-notional,'fee_bps':fee*10000,'slippage_bps':slip*10000,'scope':'Estimated proportional fees/slippage; no execution guarantee.'}
         context=dict(c,paper_fill=fill)
-        return self.store.create_trade({"mint":t["mint"],"symbol":t.get("symbol"),"entry_price_usd":execution,"amount_sol":a,"entry_time":time.time(),"context":context})
+        return self.store.create_trade({"mint":t["mint"],"symbol":t.get("symbol"),"entry_price_usd":execution,"amount_sol":a,"entry_time":time.time(),"context":context,"market_cap_usd":t.get("market_cap_usd"),"market_cap_is_fdv":t.get("market_cap_is_fdv",False)})
     def sell(self,p,t,reason):
         price=float(t.get('price_usd') or 0);sol_usd=float(t.get('sol_price_usd') or 0)
         if not 0<=time.time()-float(t.get('timestamp') or 0)<=120:return False
@@ -29,7 +29,7 @@ class PaperTrader:
             # Preserve legacy positions without inventing historical cost or SOL prices.
             execution=price;proceeds=a*price/entry
         sol=proceeds-a;pct=100*sol/a
-        closed=self.store.close_trade(int(p['id']),execution,time.time(),pct,sol,reason)
+        closed=self.store.close_trade(int(p['id']),execution,time.time(),pct,sol,reason,t.get('market_cap_usd'),t.get('market_cap_is_fdv',False))
         if closed:logging.getLogger('uvicorn.error').info('NEXUS paper exit book=%s symbol=%s mint=%s pnl_sol=%.6f reason=%s',self.store.trade_table,p.get('symbol'),p['mint'],sol,reason)
         return closed
 paper_trader=PaperTrader()
