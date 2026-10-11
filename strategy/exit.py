@@ -2,7 +2,7 @@ import math,time
 from config.settings import settings
 from paper.user_exit import exit_requested,REASON
 
-def should_exit(p,t):
+def should_exit(p,t,protective_only=False):
     entry=float(p.get("entry_price_usd") or 0);price=float(t.get("price_usd") or 0)
     timestamp=t.get('timestamp')
     if not all(math.isfinite(v) and v>0 for v in (entry,price)) or timestamp is None or not 0<=time.time()-timestamp<=120:return {"exit":False,"reason":"no fresh valid price"}
@@ -11,6 +11,8 @@ def should_exit(p,t):
     if security.get('status')=='ok' and security.get('danger'):return {'exit':True,'reason':'Security provider reports danger'}
     pnl=(price/entry-1)*100;peak=max(float(p.get('peak_price_usd') or entry),price)
     if pnl<=-abs(settings.stop_loss_pct):return {"exit":True,"reason":"hard stop","pnl_pct":pnl}
+    if settings.paper_max_hold_minutes>0 and time.time()-float(p.get('entry_time') or time.time())>=settings.paper_max_hold_minutes*60:return {"exit":True,"reason":"maximum holding time","pnl_pct":pnl}
+    if protective_only:return {"exit":False,"reason":"protective limits clear","pnl_pct":pnl}
     evidence=(t.get('research') or {})
     rotation=evidence.get('narrative_rotation') or {}
     feedback=(evidence.get('exit_learning') or {}).get('user_feedback') or {}

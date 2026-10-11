@@ -34,9 +34,19 @@ def eligible(t,now=None):
     if v['volume_5m_usd']<2000 or v['price_change_5m_pct']<5 or int(t.get('buys_5m') or 0)<=int(t.get('sells_5m') or 0):return False,'momentum or buy flow insufficient'
     return True,'momentum paper benchmark; AI and wallet score not required'
 
-def step(observations):
-    meta=initialize();by={o['token']['mint']:o['token'] for o in observations};now=time.time()
+async def manage_exits(observations):
+    from intelligence.exit_policy import decide
+    by={o['token']['mint']:o['token'] for o in observations}
     for p in BOOK.open():
+        t=by.get(p['mint'])
+        if not t:continue
+        BOOK.mark_peak(p['id'],t.get('price_usd') or 0)
+        d=await decide(BOOK,p,t)
+        if d['exit']:TRADER.sell(p,t,d['reason'],fraction=d.get('fraction',1))
+
+def step(observations,process_exits=True):
+    meta=initialize();by={o['token']['mint']:o['token'] for o in observations};now=time.time()
+    for p in BOOK.open() if process_exits else []:
         t=by.get(p['mint'])
         if not t:continue
         BOOK.mark_peak(p['id'],t.get('price_usd') or 0)
@@ -64,4 +74,4 @@ def step(observations):
 
 def summary():
     meta=initialize()
-    return dict(STATE,active=settings.paper_mode and time.time()<meta['ends_at'],started_at=meta['started_at'],ends_at=meta['ends_at'],balance_sol=TRADER.balance_sol(),min_buy_sol=settings.paper_min_buy_sol,max_buy_sol=min(settings.default_buy_sol,settings.max_trade_sol),metrics=BOOK.paper_metrics(),positions=[{k:v for k,v in p.items() if k!='context'} for p in BOOK.open()],trades=[{k:v for k,v in p.items() if k!='context'} for p in BOOK.all()[:20]],scope='Separate simulated account. Deterministic momentum benchmark, not AI discretion. Same estimated fees, slippage and exit rules as the main paper book.')
+    return dict(STATE,active=settings.paper_mode and time.time()<meta['ends_at'],started_at=meta['started_at'],ends_at=meta['ends_at'],balance_sol=TRADER.balance_sol(),min_buy_sol=settings.paper_min_buy_sol,max_buy_sol=min(settings.default_buy_sol,settings.max_trade_sol),metrics=BOOK.paper_metrics(),positions=[{k:v for k,v in p.items() if k!='context'} for p in BOOK.open()],trades=[{k:v for k,v in p.items() if k!='context'} for p in BOOK.all()[:20]],scope='Separate simulated account. Momentum entries with AI-reviewed paper exits. Estimated fees and slippage; protective limits and explicit rule fallbacks remain.')
