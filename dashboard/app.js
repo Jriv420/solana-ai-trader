@@ -145,10 +145,14 @@ function updateAccountSummary() {
   document.getElementById('balance').textContent=a.balance == null ? '— SOL':Number(a.balance).toFixed(4)+' SOL';
   document.getElementById('positions').textContent=a.positions.length;
 }
+function tokenPrice(value) {
+  if(value==null || !Number.isFinite(Number(value)) || Number(value)<=0)return '—';
+  return '$'+Number(value).toLocaleString(undefined,{maximumSignificantDigits:8});
+}
 function tradeCards(rows,positions=false) {
   const a=selectedAccount(),m=a.metrics;
   const heading=`<div class="card"><h2>${positions ? 'Positions':'Trade History'} · ${escapeHtml(a.label)}</h2><p>Realized net PnL: ${Number(m.net_pnl_sol || 0).toFixed(4)} SOL · ${Number(m.closed_trades || 0)} closed · ${a.positions.length} open</p><p class="muted">Balance is available simulated cash after open buys. Realized PnL excludes open-position gains/losses.${paperAccount==='aggressive' && !positions ? ' Showing the latest 20 trades.':''}</p></div>`;
-  return heading+(rows.length ? rows.map(t=>`<article class="card"><div class="coin-title"><h3>$${escapeHtml(t.symbol || '?')}</h3><button class="copy-ca" data-copy-ca="${escapeHtml(t.mint)}">Copy CA</button></div><p>${escapeHtml(t.status)} · ${Number(t.amount_sol).toFixed(4)} SOL · Bought ${stamp(t.entry_time)}${t.exit_time ? '<br>Closed '+stamp(t.exit_time):''}</p><p class="${Number(t.pnl_sol)>=0 ? 'positive':'negative'}">${t.pnl_sol == null ? 'Open · realized PnL pending':Number(t.pnl_sol).toFixed(4)+' SOL · '+Number(t.pnl_pct).toFixed(1)+'%'}</p>${t.exit_reason ? '<p>Exit: '+escapeHtml(t.exit_reason)+'</p>':''}<p class="mint">${escapeHtml(t.mint)}</p></article>`).join(''):'<div class="empty">'+(positions ? 'No open positions in this account.':'No trades in this account yet.')+'</div>');
+  return heading+(rows.length ? rows.map(t=>`<article class="card"><div class="coin-title"><h3>$${escapeHtml(t.symbol || '?')}</h3><button class="copy-ca" data-copy-ca="${escapeHtml(t.mint)}">Copy CA</button></div><p>${escapeHtml(t.status)} · ${Number(t.amount_sol).toFixed(4)} SOL · Bought ${stamp(t.entry_time)}${t.exit_time ? '<br>Closed '+stamp(t.exit_time):''}</p><p>Entry price: ${tokenPrice(t.entry_price_usd)} per token${t.status==='closed' ? '<br>Exit price: '+tokenPrice(t.exit_price_usd)+' per token':''}</p><p class="muted">Simulated USD fill prices, including estimated slippage.</p><p class="${Number(t.pnl_sol)>=0 ? 'positive':'negative'}">${t.pnl_sol == null ? 'Open · realized PnL pending':Number(t.pnl_sol).toFixed(4)+' SOL · '+Number(t.pnl_pct).toFixed(1)+'%'}</p>${t.exit_reason ? '<p>Exit: '+escapeHtml(t.exit_reason)+'</p>':''}<p class="mint">${escapeHtml(t.mint)}</p></article>`).join(''):'<div class="empty">'+(positions ? 'No open positions in this account.':'No trades in this account yet.')+'</div>');
 }
 document.getElementById('paper-account').addEventListener('change',event=>{
  paperAccount=event.target.value==='original' ? 'original':'aggressive';
