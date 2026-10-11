@@ -22,7 +22,7 @@ class PaperTrader:
         trade_id=self.store.create_trade({"mint":t["mint"],"symbol":t.get("symbol"),"entry_price_usd":execution,"amount_sol":a,"entry_time":entered,"context":context,"market_cap_usd":t.get("market_cap_usd"),"market_cap_is_fdv":t.get("market_cap_is_fdv",False)})
         from intelligence.trade_evaluation import snapshot,safe_record
         from intelligence.policy_trials import safe_start
-        safe_record(self.store.trade_table,trade_id['id'],t['mint'],'entry',{'action':'buy','amount_sol':a,'evidence':snapshot(t),'cost_model':fill})
+        safe_record(self.store.trade_table,trade_id['id'],t['mint'],'entry',{'action':'buy','amount_sol':a,'evidence':snapshot(t),'cost_model':fill,'entry_learning':t.get('entry_learning') or {'action':'not_assessed'}})
         safe_start(self.store.trade_table,trade_id['id'],t,a,execution,fill,entered)
         return trade_id
     def sell(self,p,t,reason,fraction=1):

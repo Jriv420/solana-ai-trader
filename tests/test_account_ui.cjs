@@ -51,3 +51,8 @@ status.learning={original:{metrics:{completed_positions:7,win_rate_pct:42.9},rec
 paperAccount='aggressive';assert(learningView().includes('2 completed positions'));assert(learningView().includes('50.0%'));assert(learningView().includes('account=aggressive'));
 paperAccount='original';assert(learningView().includes('7 completed positions'));assert(learningView().includes('42.9%'));assert(learningView().includes('account=original'));paperAccount='aggressive';
 `,context);
+vm.runInContext(`
+status.learning.aggressive.entry_learning={version:'entry-loss-v1',completed_evidence_positions:9,recorded_screens:3,recent:[{mint:'test',at:1,decision:{action:'avoid',reason:'<script>bad</script>',matches:[]},outcome:{net_return_pct:10}}]};
+paperAccount='aggressive';assert(learningView().includes('Entry learning'));assert(learningView().includes('avoid'));assert(learningView().includes('&lt;script&gt;bad'));assert(!learningView().includes('<script>bad'));
+paperAccount='original';assert(!learningView().includes('&lt;script&gt;bad'));paperAccount='aggressive';
+`,context);

@@ -69,11 +69,16 @@ def positions(book):
         complete = root['status'] == 'closed' and all(x['status'] == 'closed' for x in legs)
         realized = sum(float(x['pnl_sol'] or 0) for x in legs if x['status'] == 'closed')
         amount = sum(float(x['amount_sol']) for x in legs)
+        entry=root['context'].get('entry_evidence') or root['context'].get('token') or {}
+        entry_market={k:entry.get(k) for k in MARKET_KEYS}
+        entry_market['market_cap_is_fdv']=entry.get('market_cap_is_fdv',bool(root.get('entry_cap_is_fdv')))
+        if entry_market.get('market_cap_usd') is None:entry_market['market_cap_usd']=root.get('entry_market_cap_usd')
         results.append({'book': book, 'root_id': root_id, 'mint': root['mint'], 'symbol': root.get('symbol'),
                         'entry_time': root['entry_time'], 'exit_time': max((x['exit_time'] or 0) for x in legs) if complete else None,
                         'complete': complete, 'costed': costed, 'legs': len(legs), 'amount_sol': amount,
                         'net_pnl_sol': realized, 'return_pct': 100 * realized / amount if complete and amount else None,
                         'entry_market_cap_usd': root.get('entry_market_cap_usd'),
+                        'entry_market': entry_market,
                         'activity': ((root['context'].get('entry_evidence') or root['context'].get('token') or {}).get('research') or {}).get('activity') or {},
                         'features': ((root['context'].get('entry_evidence') or root['context'].get('token') or {}).get('research') or {}).get('features') or {},
                         'exit_reason': root.get('exit_reason')})

@@ -35,7 +35,7 @@ def evidence(book,p,t):
     for x in sorted(positions(book.trade_table),key=lambda x:x.get('exit_time') or 0,reverse=True):
         if not x['complete'] or not x['costed']:continue
         from intelligence.exit_learning import review
-        outcomes.append(dict(x,after_exit_review=review(book.trade_table,x['root_id'])))
+        outcomes.append(dict({k:x[k] for k in ('root_id','mint','symbol','entry_time','exit_time','amount_sol','net_pnl_sol','return_pct','entry_market_cap_usd','exit_reason','features')},after_exit_review=review(book.trade_table,x['root_id'])))
         if len(outcomes)>=12:break
     research=t.get('research') or {}
     state={'task':'paper_exit','mint':p['mint'],'book':book.trade_table,'position':{k:p.get(k) for k in ('id','symbol','entry_price_usd','entry_time','amount_sol','peak_price_usd','entry_market_cap_usd')},

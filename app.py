@@ -54,6 +54,8 @@ async def analyze(t):
     t['setup_type']=f['mode']
     t['paper_risk_trial']=risk_trial_status()
     t['missed_opportunity_learning']=STATE.get('missed_learning',{})
+    from intelligence.entry_learning import safe_assess,safe_screen
+    t['entry_learning']=safe_assess('trades',t) if settings.paper_mode else {'action':'inactive'}
     discretionary=exception_eligible(t,f)
     if not f["pass"] and not discretionary:
         missed.observe(t,f['reasons'])
@@ -71,6 +73,10 @@ async def analyze(t):
     missed.observe(t,f['reasons']+e['reasons'])
     if waived['allowed']:e=dict(e,enter=True,paper_exception=waived)
     elif not f['pass']:e=dict(e,enter=False,reasons=f['reasons']+e['reasons'])
+    if e['enter'] and settings.paper_mode:
+        safe_screen('trades',t,t['entry_learning'])
+        if t['entry_learning']['action']!='allow':
+            e=dict(e,enter=False,reasons=e['reasons']+['entry learning: '+t['entry_learning']['reason']])
     o={"filter":f,"token":t,"fast":fast,"wallet":w,"social":s,"risk":r,"entry":e,"route":choose_route(t),"status":"candidate" if e["enter"] else "watch" if f["pass"] else "rejected"}
     if e["enter"] and settings.paper_mode:
         existing={p["mint"] for p in paper_trader.open_positions()}
@@ -91,7 +97,9 @@ async def loop():
             sol_price=await get_sol_price()
             for token in ts:token["sol_price_usd"]=sol_price
             from intelligence.policy_trials import safe_observe
+            from intelligence.entry_learning import safe_observe as observe_entry
             for token in ts:
+                observe_entry(token)
                 safe_observe(dict(token,research={'security':research.security(token['mint'])}))
             by={t['mint']:t for t in ts}
             # Process exits before entries so risk limits use the latest realized balance.
@@ -154,7 +162,8 @@ def learning_summary():
     if cached and time.time()-cached[0]<15:return cached[1]
     from intelligence.trade_evaluation import summary
     from intelligence.policy_trials import summary as trials
-    value={name:dict(summary(book),trials=trials(book)) for name,book in (('original','trades'),('aggressive','shadow_trades'))}
+    from intelligence.entry_learning import summary as entries
+    value={name:dict(summary(book),trials=trials(book),entry_learning=entries(book)) for name,book in (('original','trades'),('aggressive','shadow_trades'))}
     _learning_cache.clear();_learning_cache[key]=(time.time(),value)
     return value
 
