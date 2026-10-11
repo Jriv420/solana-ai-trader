@@ -46,6 +46,11 @@ class Store:
             t=x['context'].get('entry_evidence') or x['context'].get('token') or {}
             cap=valid_cap(t.get('market_cap_usd'))
             if cap is not None:x.update(entry_market_cap_usd=cap,entry_cap_is_fdv=bool(t.get('market_cap_is_fdv')))
+        from intelligence.exit_learning import RUNNER,FEEDBACK
+        if x.get('mint')==RUNNER:x['user_exit_feedback']=FEEDBACK
+        if x.get('status')=='closed':
+            from intelligence.exit_learning import review
+            x['exit_review']=review(self.trade_table,x['id'])
         return x
     def create_trade(self,t):
         with self.conn() as c:
