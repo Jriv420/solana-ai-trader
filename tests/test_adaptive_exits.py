@@ -40,6 +40,27 @@ class AdaptiveExits(unittest.IsolatedAsyncioTestCase):
             self.assertAlmostEqual(sum(r['context']['paper_fill']['quantity'] for r in rows),.1/(1+settings.paper_fee_bps/10000)*100/(1+settings.paper_slippage_bps/10000))
             captured=ai.evidence(self.book,self.book.open()[0],token)
             self.assertEqual(len(captured['past_completed_positions']),0)  # Two profitable partial fills do not make a completed winning position.
+    async def test_small_repeated_trims_and_large_trim_apply_to_remainder(self):
+        for action,fraction,expected in [('sell_10',.1,.09),('sell_10',.1,.081),('sell_70',.7,.0243)]:
+            p=self.book.open()[0];at=max(time.time(),(p.get('exit_decision') or {}).get('checked_at',0)+121)
+            token=dict(self.t,price_usd=2,timestamp=at)
+            with patch.object(ai.time,'time',return_value=at),patch.object(ai,'ask_jev',AsyncMock(return_value={'action':action,'reason':'Protect profit with upside retained.'})):
+                d=await ai.decide(self.book,p,token)
+                self.assertEqual(d['fraction'],fraction)
+                self.assertTrue(self.trader.sell(p,token,d['reason'],fraction))
+                self.assertAlmostEqual(self.book.open()[0]['amount_sol'],expected)
+                self.assertFalse((await ai.decide(self.book,self.book.open()[0],token))['exit'])
+        self.assertAlmostEqual(sum(r['amount_sol'] for r in self.book.all()),.1)
+
+    def test_calculated_metrics_include_costs_and_handle_missing_prices(self):
+        p=dict(self.book.open()[0],peak_price_usd=2.5)
+        m=ai.calculated_metrics(p,dict(self.t,price_usd=2))
+        self.assertAlmostEqual(m['price_gain_from_entry_pct'],100*(2/p['entry_price_usd']-1))
+        self.assertAlmostEqual(m['drawdown_from_recorded_peak_pct'],-20)
+        self.assertLess(m['estimated_net_return_pct'],m['price_gain_from_entry_pct'])
+        self.assertIsNone(ai.calculated_metrics(p,dict(self.t,price_usd=float('nan')))['price_gain_from_entry_pct'])
+        self.assertNotIn('estimated_net_return_pct',ai.calculated_metrics(p,dict(self.t,sol_price_usd=0)))
+
     async def test_protective_limits_override_ai_and_stale_prices_do_not_call_ai(self):
         with patch.object(ai,'ask_jev',AsyncMock()) as call:
             self.assertEqual((await ai.decide(self.book,self.book.open()[0],dict(self.t,price_usd=.7)))['reason'],'hard stop')
@@ -55,7 +76,7 @@ class AdaptiveExits(unittest.IsolatedAsyncioTestCase):
         from datetime import datetime,timezone
         self.assertEqual(db.store.ai_request_count('jev_exit',datetime.now(timezone.utc).date().isoformat()),1)
     def test_action_contract_is_distinct_from_entry_score(self):
-        body=jev.request_body({'task':'paper_exit'},[]);self.assertIn('exit',body['questions']);self.assertEqual(body['questions']['exit']['type'],'choice');self.assertEqual(set(body['questions']['exit']['criteria']),{'hold','sell_25','sell_50','sell_all'})
+        body=jev.request_body({'task':'paper_exit'},[]);self.assertIn('exit',body['questions']);self.assertEqual(body['questions']['exit']['type'],'choice');self.assertEqual(set(body['questions']['exit']['criteria']),{'hold','sell_10','sell_25','sell_50','sell_70','sell_all'})
         self.assertEqual(jev.normalize_response({'answers':{'exit':{'type':'choice','choice':'sell_50'}}})['action'],'sell_50')
         for n in (True,1.5,'unknown',None):
             with self.assertRaises(ValueError):jev.normalize_response({'answers':{'exit':{'type':'choice','choice':n}}})

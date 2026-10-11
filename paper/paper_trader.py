@@ -52,6 +52,7 @@ class PaperTrader:
                 start(self.store.trade_table,child,t)
                 from intelligence.trade_evaluation import snapshot,safe_record
                 safe_record(self.store.trade_table,p['id'],t['mint'],'fill',{'action':'partial_sell','fraction':fraction,'pnl_sol':sol,'reason':reason,'evidence':snapshot(t)})
+                logging.getLogger('uvicorn.error').info('NEXUS paper partial exit book=%s trade=%s symbol=%s fraction=%.2f pnl_sol=%.6f',self.store.trade_table,p['id'],p.get('symbol'),fraction,sol)
             return bool(child)
         closed=self.store.close_trade(int(p['id']),execution,time.time(),pct,sol,reason,t.get('market_cap_usd'),t.get('market_cap_is_fdv',False))
         if closed:
