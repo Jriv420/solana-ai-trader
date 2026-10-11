@@ -22,7 +22,7 @@ class PaperTrader:
         trade_id=self.store.create_trade({"mint":t["mint"],"symbol":t.get("symbol"),"entry_price_usd":execution,"amount_sol":a,"entry_time":entered,"context":context,"market_cap_usd":t.get("market_cap_usd"),"market_cap_is_fdv":t.get("market_cap_is_fdv",False)})
         from intelligence.trade_evaluation import snapshot,safe_record
         from intelligence.policy_trials import safe_start
-        safe_record(self.store.trade_table,trade_id['id'],t['mint'],'entry',{'action':'buy','amount_sol':a,'evidence':snapshot(t),'cost_model':fill,'entry_learning':t.get('entry_learning') or {'action':'not_assessed'}})
+        safe_record(self.store.trade_table,trade_id['id'],t['mint'],'entry',{'action':'buy','amount_sol':a,'evidence':snapshot(t),'cost_model':fill,'entry_learning':t.get('entry_learning') or {'action':'not_assessed'},'team':(c.get('entry_team') or c.get('fast') or {}).get('team'), 'execution_reason':c.get('strategy') or 'Original combined strategy and independent risk gates'})
         safe_start(self.store.trade_table,trade_id['id'],t,a,execution,fill,entered)
         return trade_id
     def sell(self,p,t,reason,fraction=1):
@@ -45,6 +45,8 @@ class PaperTrader:
             # Preserve legacy positions without inventing historical cost or SOL prices.
             execution=price;proceeds=a*price/entry
         sol=(proceeds-a)*fraction;pct=100*sol/(a*fraction)
+        protective=reason in ('hard stop','maximum holding time','Security provider reports danger') or 'user-requested' in reason.lower()
+        self.store.save_execution_audit(p['id'],{'time':time.time(),'fraction':fraction,'reason':reason,'risk_override':protective,'rule':reason if protective else None,'last_ai_review':{k:(p.get('exit_decision') or {}).get(k) for k in ('provider','action','checked_at')},'evidence':{'price_usd':price,'market_cap_usd':t.get('market_cap_usd'),'timestamp':t.get('timestamp')},'scope':'Execution evidence; a protective exit is independent of the last AI recommendation.'})
         if fraction<1:
             child=self.store.partial_close(p,execution,time.time(),pct,sol,reason,fraction,t.get('market_cap_usd'),t.get('market_cap_is_fdv',False))
             if child:

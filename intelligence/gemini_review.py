@@ -18,7 +18,9 @@ def usage():
 
 def request_body(state):
     # Share evidence limits and conservative instructions with the OpenAI adapter.
-    body=openai_body(state)
+    from intelligence.model_team import compact
+    body=openai_body(compact(state))
+    body['instructions']+=' Your role is narrative and continuation analysis: assess sourced themes, social/viral activity and influencer evidence when supplied, explicitly flag unavailable social data. You cannot browse or authenticate identities from transfers.'
     if state.get('task')=='paper_exit':
         from intelligence.exit_policy import PROMPT,ACTIONS
         body['instructions']=PROMPT
@@ -28,10 +30,10 @@ def request_body(state):
                 'thinkingConfig':{'thinkingLevel':'LOW','includeThoughts':False},
                 'responseMimeType':'application/json',
                 'responseSchema':{'type':'OBJECT','properties':{
-                    'score':{'type':'NUMBER','minimum':0,'maximum':100},
-                    'reason':{'type':'STRING'}},'required':['score','reason']}}}
+                    'action':{'type':'STRING','enum':['buy','hold','skip']},'score':{'type':'NUMBER','minimum':0,'maximum':100},
+                    'confidence':{'type':'NUMBER','minimum':0,'maximum':1},'reason':{'type':'STRING'}},'required':['score','reason']}}}
     if state.get('task')=='paper_exit':
-        result['generationConfig']['responseSchema']={'type':'OBJECT','properties':{'action':{'type':'STRING','enum':[a[0] for a in ACTIONS]},'reason':{'type':'STRING'}},'required':['action','reason']}
+        result['generationConfig']['responseSchema']={'type':'OBJECT','properties':{'action':{'type':'STRING','enum':[a[0] for a in ACTIONS]},'confidence':{'type':'NUMBER','minimum':0,'maximum':1},'reason':{'type':'STRING'}},'required':['action','reason']}
     return result
 
 def normalize_response(data,exit_mode=False):
@@ -46,11 +48,11 @@ def normalize_response(data,exit_mode=False):
     if exit_mode:
         from intelligence.exit_policy import ACTIONS
         if answer.get('action') not in {a[0] for a in ACTIONS} or not isinstance(answer.get('reason'),str):raise ValueError('Invalid exit review')
-        return {'action':answer['action'],'reason':answer['reason'][:1000]}
+        return {'action':answer['action'],'reason':answer['reason'][:1000],'confidence':answer.get('confidence')}
     score=answer.get('score');reason=answer.get('reason')
     if (not isinstance(score,(int,float)) or isinstance(score,bool) or not math.isfinite(score)
         or not 0<=score<=100 or not isinstance(reason,str)):raise ValueError('Invalid review')
-    return {'score':score,'review':{'reason':reason[:1000],'model':data.get('modelVersion'),
+    return {'score':score,'action':answer.get('action'),'confidence':answer.get('confidence'),'review':{'reason':reason[:1000],'model':data.get('modelVersion'),
                                   'usage':data.get('usageMetadata')}}
 
 async def ask_gemini(state):

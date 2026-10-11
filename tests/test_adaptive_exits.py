@@ -6,16 +6,16 @@ import database.store as db
 from database.store import Store
 from config.settings import settings
 from paper.paper_trader import PaperTrader
-from intelligence import exit_policy as ai,jev,gemini_review
+from intelligence import exit_policy as ai,jev,gemini_review,model_team
 
 class AdaptiveExits(unittest.IsolatedAsyncioTestCase):
     def setUp(self):
         self.tmp=tempfile.TemporaryDirectory();self.db=patch.object(db,'DB',Path(self.tmp.name)/'db');self.db.start()
         self.book=Store('shadow_trades');db.store.ensure_observations();self.trader=PaperTrader(self.book)
-        self.config=patch.object(ai,'settings',replace(settings,paper_mode=True,jev_api_key='test',jev_endpoint='https://test',gemini_api_key=''));self.config.start()
+        self.config=patch.object(ai,'settings',replace(settings,paper_mode=True,jev_api_key='test',jev_endpoint='https://test',gemini_api_key=''));self.config.start();self.team_config=patch.object(model_team,'settings',ai.settings);self.team_config.start();model_team._CACHE.clear()
         self.t={'mint':'test','symbol':'T','timestamp':time.time(),'price_usd':1,'sol_price_usd':100,'market_cap_usd':40000,'research':{'features':{'narrative':'unknown'},'security':{'status':'ok','danger':False}}}
         self.trader.buy(self.t,.1,{'entry_evidence':self.t})
-    def tearDown(self):self.config.stop();self.db.stop();self.tmp.cleanup()
+    def tearDown(self):self.team_config.stop();self.config.stop();self.db.stop();self.tmp.cleanup()
     async def test_hold_above_profit_target_and_cached_partial_is_never_replayed(self):
         high=dict(self.t,price_usd=2,market_cap_usd=80000)
         with patch.object(ai,'ask_jev',AsyncMock(return_value={'action':'hold','reason':'Fresh buy flow supports waiting.'})) as call:
@@ -95,7 +95,7 @@ class AdaptiveExits(unittest.IsolatedAsyncioTestCase):
         from datetime import datetime,timezone
         self.assertEqual(db.store.ai_request_count('jev_exit',datetime.now(timezone.utc).date().isoformat()),1)
     def test_action_contract_is_distinct_from_entry_score(self):
-        body=jev.request_body({'task':'paper_exit'},[]);self.assertIn('exit',body['questions']);self.assertEqual(body['questions']['exit']['type'],'choice');self.assertEqual(set(body['questions']['exit']['criteria']),{'hold','sell_10','sell_25','sell_50','sell_70','sell_all'})
+        body=jev.request_body({'task':'paper_exit'},[]);self.assertIn('exit',body['questions']);self.assertEqual(body['questions']['exit']['type'],'choice');self.assertEqual(set(body['questions']['exit']['criteria']),{'hold','sell_25','sell_all'}|{'sell_'+str(n) for n in range(10,100,10)})
         self.assertEqual(jev.normalize_response({'answers':{'exit':{'type':'choice','choice':'sell_50'}}})['action'],'sell_50')
         for n in (True,1.5,'unknown',None):
             with self.assertRaises(ValueError):jev.normalize_response({'answers':{'exit':{'type':'choice','choice':n}}})
@@ -109,7 +109,7 @@ class AdaptiveExits(unittest.IsolatedAsyncioTestCase):
         original=httpx.AsyncClient;calls=[]
         def handler(request):
             body=json.loads(request.content);calls.append(body)
-            is_exit='action' in body['generationConfig']['responseSchema']['properties']
+            is_exit='sell_all' in body['generationConfig']['responseSchema']['properties'].get('action',{}).get('enum',[])
             answer={'action':'hold','reason':'Buy flow persists.'} if is_exit else {'score':75,'reason':'Entry evidence.'}
             return httpx.Response(200,json={'candidates':[{'finishReason':'STOP','content':{'parts':[{'text':json.dumps(answer)}]}}]})
         cfg=replace(settings,gemini_api_key='test',gemini_daily_request_limit=5)
@@ -127,4 +127,4 @@ class AdaptiveExits(unittest.IsolatedAsyncioTestCase):
         with patch.object(shadow,'BOOK',self.book),patch.object(shadow,'TRADER',self.trader),patch.object(ai,'ask_jev',AsyncMock(return_value={'action':'sell_all','reason':'Buy flow failed.'})):
             await shadow.manage_exits([{'token':self.t}])
             self.assertEqual(self.book.open(),[])
-            self.assertIn('AI exit (jev)',self.book.all()[0]['exit_reason'])
+            self.assertIn('AI exit (model-team)',self.book.all()[0]['exit_reason'])

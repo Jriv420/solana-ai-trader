@@ -46,6 +46,20 @@ async def manage_exits(observations):
         d=await decide(BOOK,p,t)
         if d['exit']:TRADER.sell(p,t,d['reason'],fraction=d.get('fraction',1))
 
+async def prepare_entries(observations):
+    from intelligence.model_team import entry
+    candidates=sorted((o['token'] for o in observations),key=lambda t:float(t.get('volume_5m_usd') or 0),reverse=True)
+    slots=max(0,3-len(BOOK.open()));reviewed=0
+    for t in candidates:
+        t['team_required']=True
+        if reviewed>=slots or not eligible(t)[0] or t['mint'] in {p['mint'] for p in BOOK.open()}:continue
+        with store.conn() as c:last=c.execute('SELECT MAX(entry_time) n FROM shadow_trades WHERE mint=?',(t['mint'],)).fetchone()['n']
+        if last and time.time()-last<3600:continue
+        from intelligence.entry_learning import safe_assess
+        learning=safe_assess('shadow_trades',t)
+        if learning['action']!='allow':continue
+        t['entry_team']=await entry(dict(t,book='shadow_trades',entry_learning=learning));reviewed+=1
+
 def step(observations,process_exits=True):
     meta=initialize();by={o['token']['mint']:o['token'] for o in observations};now=time.time()
     for p in BOOK.open() if process_exits else []:
@@ -82,10 +96,15 @@ def step(observations,process_exits=True):
                 blockers['entry learning: '+learning['reason']]+=1
                 continue
             t=dict(t,entry_learning=learning)
+            team=t.get('entry_team')
+            if t.get('team_required') and not team:
+                blockers['awaiting model team review']+=1;continue
+            if team and team['provider']=='model-team' and team['score']<50:
+                blockers['model team entry evidence below 50']+=1;continue
             # Momentum strength controls simulated size; this is not an AI confidence score.
             strength=50+min(50,max(0,float(t.get('price_change_5m_pct') or 0)-5))
             amount=position_size_sol(strength,TRADER.balance_sol())
-            if amount>0 and TRADER.buy(t,amount,{'strategy':'aggressive momentum benchmark','entry_evidence':t,'rules':{'min_liquidity':5000,'min_volume_5m':2000,'min_change_5m':5,'buys_over_sells':True,'wallet_or_ai_required':False}}):buys+=1
+            if amount>0 and TRADER.buy(t,amount,{'strategy':'aggressive momentum with model team review','entry_team':team,'entry_evidence':t,'rules':{'min_liquidity':5000,'min_volume_5m':2000,'min_change_5m':5,'buys_over_sells':True,'wallet_or_ai_required':False}}):buys+=1
             else:blockers['balance or fresh fill unavailable']+=1
     STATE.update(active=active,paper_buys=buys,blockers=dict(blockers),checked_at=now,entry_pause_reasons=pause,daily_realized_sol=daily,daily_loss_limit_sol=.15,daily_loss_limit_enabled=loss_enabled,daily_limit_resets_at=(int(now//86400)+1)*86400)
     return dict(STATE)

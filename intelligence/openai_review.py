@@ -20,6 +20,8 @@ def usage():
 
 def request_body(state):
     # Oversized evidence is skipped, never silently truncated into misleading JSON.
+    from intelligence.model_team import compact
+    state=compact(state)
     evidence=json.dumps(state,allow_nan=False,separators=(',',':'))
     if len(evidence.encode())>12000:raise ReviewPaused('evidence_too_large')
     return {'model':settings.openai_model,'store':False,'max_output_tokens':1000,
