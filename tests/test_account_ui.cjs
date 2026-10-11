@@ -23,3 +23,18 @@ assert.equal(document.getElementById('balance').textContent,'— SOL');
 assert(document.getElementById('content').innerHTML.includes('No open positions'));
 `,context);
 console.log('Paper account UI switching checks passed');
+
+(async()=>{
+ let resolve;
+ context.fetch=path=>path==='/api/status' ? new Promise(r=>resolve=r):Promise.reject(new Error('feed unavailable'));
+ const running=vm.runInContext('loading=false;refreshDashboard()',context);
+ resolve({ok:true,json:async()=>({balance_sol:.95,open_positions:[],shadow:{balance_sol:.72,positions:[],trades:[],metrics:{}}})});
+ await running;await new Promise(r=>setImmediate(r));
+ assert.equal(node('balance').textContent,'0.7200 SOL');
+ node('paper-account').listeners.change({target:{value:'original'}});
+ assert.equal(node('balance').textContent,'0.9500 SOL');
+ resolve({ok:true,json:async()=>({balance_sol:.96,open_positions:[],shadow:{balance_sol:.71,positions:[],trades:[],metrics:{}}})});
+ await new Promise(r=>setImmediate(r));
+ assert.equal(node('balance').textContent,'0.9600 SOL');
+ console.log('Fresh account balances update even when a feed fails');
+})().catch(e=>{console.error(e);process.exitCode=1;});

@@ -6,6 +6,7 @@ from database.store import Store,store
 from paper.paper_trader import PaperTrader
 from strategy.exit import should_exit
 from data.tracked_wallets import valid_address
+from paper.user_exit import exit_requested
 BOOK=Store('shadow_trades')
 TRADER=PaperTrader(BOOK)
 STATE={}
@@ -20,6 +21,7 @@ def initialize():
 
 def eligible(t,now=None):
     now=time.time() if now is None else now
+    if exit_requested(t):return False,'user-requested risk block'
     if not valid_address(t.get('mint','')):return False,'invalid contract'
     security=(t.get('research') or {}).get('security',{})
     if security.get('status')!='ok' or security.get('danger'):return False,'security pending or danger'
