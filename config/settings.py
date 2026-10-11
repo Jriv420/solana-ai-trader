@@ -40,6 +40,7 @@ class Settings:
     tracked_wallets_json: str=os.getenv("TRACKED_WALLETS", "[]")
     jev_api_key: str=os.getenv("JEV_API_KEY","")
     jev_endpoint: str=os.getenv("JEV_ENDPOINT","")
+    jev_exit_daily_limit: int=_i("JEV_EXIT_DAILY_LIMIT",300)
     jev_timeout_ms: int=_i("JEV_TIMEOUT_MS",10000)
     openai_api_key: str=os.getenv("OPENAI_API_KEY","")
     openai_endpoint: str="https://api.openai.com/v1/responses"
@@ -75,6 +76,9 @@ def daily_loss_limit_enabled(base=None):
     # The testing override can never disable a real-money limit.
     base=base or settings
     return not base.paper_mode or _b('PAPER_DAILY_LOSS_LIMIT_ENABLED',True)
+
+def paper_continuous():
+    return settings.paper_mode and _b('PAPER_CONTINUOUS',False)
 
 def paper_test_until():
     import math

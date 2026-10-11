@@ -68,7 +68,7 @@ async def review(name,state,mode,call=None):
             if not store.reserve_ai_request(name+'_team',day,30):raise ReviewPaused('daily_team_limit_reached')
         if name=='jev' and mode=='exit':
             day=datetime.now(timezone.utc).date().isoformat()
-            if not store.reserve_ai_request('jev_exit',day,300):raise ReviewPaused('daily_exit_limit_reached')
+            if not store.reserve_ai_request('jev_exit',day,max(0,settings.jev_exit_daily_limit)):raise ReviewPaused('daily_exit_limit_reached')
         supplied=compact(state)
         if call:response=await call(supplied)
         elif name=='jev':response=await ask_jev(supplied,[])
