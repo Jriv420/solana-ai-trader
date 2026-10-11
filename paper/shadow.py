@@ -58,4 +58,4 @@ def step(observations):
 
 def summary():
     meta=initialize()
-    return dict(STATE,active=settings.paper_mode and time.time()<meta['ends_at'],started_at=meta['started_at'],ends_at=meta['ends_at'],balance_sol=TRADER.balance_sol(),metrics=BOOK.paper_metrics(),positions=BOOK.open(),trades=BOOK.all(),scope='Separate simulated account. Deterministic momentum benchmark, not AI discretion. Same estimated fees, slippage and exit rules as the main paper book.')
+    return dict(STATE,active=settings.paper_mode and time.time()<meta['ends_at'],started_at=meta['started_at'],ends_at=meta['ends_at'],balance_sol=TRADER.balance_sol(),metrics=BOOK.paper_metrics(),positions=[{k:v for k,v in p.items() if k!='context'} for p in BOOK.open()],trades=[{k:v for k,v in p.items() if k!='context'} for p in BOOK.all()[:20]],scope='Separate simulated account. Deterministic momentum benchmark, not AI discretion. Same estimated fees, slippage and exit rules as the main paper book.')
