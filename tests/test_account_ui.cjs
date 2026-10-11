@@ -56,3 +56,15 @@ status.learning.aggressive.entry_learning={version:'entry-loss-v1',completed_evi
 paperAccount='aggressive';assert(learningView().includes('Entry learning'));assert(learningView().includes('avoid'));assert(learningView().includes('&lt;script&gt;bad'));assert(!learningView().includes('<script>bad'));
 paperAccount='original';assert(!learningView().includes('&lt;script&gt;bad'));paperAccount='aggressive';
 `,context);
+
+vm.runInContext(`
+const grouped={id:61,symbol:'UNCC',mint:'uncc',status:'closed',amount_sol:.0558,entry_market_cap_usd:128000,exit_market_cap_usd:124100,pnl_sol:-.0024,pnl_pct:-4.4,position_history:{original_amount_sol:.0992,remaining_amount_sol:0,realized_net_pnl_sol:.0968,return_pct:97.6,average_sell_market_cap_usd:260000,complete:true,fills:[{id:63,kind:'partial sale',fraction_of_remainder:.25,exit_market_cap_usd:500000,pnl_sol:.066,pnl_pct:266,exit_time:1,exit_reason:'trim'},{id:61,kind:'final exit',fraction_of_remainder:1,exit_market_cap_usd:124100,pnl_sol:-.0024,pnl_pct:-4.4,exit_time:2,exit_reason:'exit'}]}};
+const html=tradeCards([grouped]);
+assert(html.includes('Whole-trade realized net PnL'));
+assert(html.includes('0.0968 SOL'));
+assert(html.includes('Full trade history · 2 sales'));
+assert(html.includes('Average sell market cap:'));
+assert(html.includes('$260K'));
+assert(html.includes('-0.0024 SOL'));
+assert(html.includes('25% of remainder'));
+`,context);

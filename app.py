@@ -174,11 +174,11 @@ async def learning_decisions(account: Literal['original','aggressive']='aggressi
     return {'records':dataset('trades' if account=='original' else 'shadow_trades',limit),'scope':'Observed outcomes are not correct-action training labels; no automatic model training. Future outcomes are separate from decision-time evidence.'}
 
 @app.get("/api/status")
-async def status():return {"learning":learning_summary(),"protection":dict(protection_status),"narrative_trends":narrative_trend_summary(),"activity_learning":activity_comparison(),"shadow":shadow_summary(),"risk_trial":risk_trial_status(),"paper_mode":settings.paper_mode,"balance_sol":paper_trader.balance_sol(),"open_positions":paper_trader.open_positions(),"agents":STATE["agents"],"error":STATE.get("error"),"new_pairs_feed":dict(FEED),"paper_metrics":store.paper_metrics(),"missed_learning":STATE.get("missed_learning",{}),"scan":STATE.get("scan"),"scan_started_at":STATE.get("scan_started_at")}
+async def status():return {"learning":learning_summary(),"protection":dict(protection_status),"narrative_trends":narrative_trend_summary(),"activity_learning":activity_comparison(),"shadow":shadow_summary(),"risk_trial":risk_trial_status(),"paper_mode":settings.paper_mode,"balance_sol":paper_trader.balance_sol(),"open_positions":[p for p in store.position_history() if p["status"]=="open"],"agents":STATE["agents"],"error":STATE.get("error"),"new_pairs_feed":dict(FEED),"paper_metrics":store.paper_metrics(),"missed_learning":STATE.get("missed_learning",{}),"scan":STATE.get("scan"),"scan_started_at":STATE.get("scan_started_at")}
 @app.get("/api/opportunities")
 async def opps():return STATE["opportunities"]
 @app.get("/api/trades")
-async def trades():return store.all()
+async def trades():return store.position_history()
 @app.get("/api/new-pairs")
 async def new_pairs():
     items=store.new_pairs()
