@@ -25,7 +25,8 @@ from typing import Literal
 from data.tracked_wallets import get_tracked_wallet_holders, valid_address, configured_wallets, _cache as wallet_balance_cache
 from data.wallet_discovery import wallet_learning_loop, STATUS as WALLET_STATUS
 from database.wallet_registry import wallet_registry
-from intelligence.decision_engine import evaluate_fast, CONNECTIONS, provider_result, _fallback
+from intelligence.decision_engine import CONNECTIONS, provider_result, _fallback
+from intelligence.model_team import entry as evaluate_fast
 from intelligence.wallet_ai import score_wallet_context
 from intelligence.social_ai import score_social_context
 from intelligence.risk_ai import score_contextual_risk
@@ -63,7 +64,7 @@ async def analyze(t):
     # Bound exploratory reviews to one per minute; normal qualified reviews keep their existing limits.
     explore=discretionary and time.time()-STATE.get('last_exception_review',0)>=60
     if explore:STATE['last_exception_review']=time.time()
-    fast=await evaluate_fast(t) if w['score']>=rules.min_wallet_score or explore else dict(_fallback(t),reason='Awaiting qualified wallet evidence before paid AI escalation')
+    fast=await evaluate_fast(dict(t,book='trades')) if w['score']>=rules.min_wallet_score or explore else dict(_fallback(t),reason='Awaiting qualified wallet evidence before paid AI escalation')
     STATE['agents'][fast['provider']]='active'
     STATE['agents']['wallet_ai']=w['status']
     STATE['agents']['social_ai']=social_evidence.get('status','unknown')
@@ -127,6 +128,8 @@ async def loop():
                 from intelligence.exit_learning import observe as observe_exit
                 observe_exit(observation['token'])
                 observations.append(observation)
+            from paper.shadow import prepare_entries
+            await prepare_entries(observations)
             STATE["shadow"]=shadow_step(observations,process_exits=False)
             logging.getLogger('uvicorn.error').info('NEXUS shadow paper summary %s',STATE["shadow"])
             STATE["opportunities"]=observations
@@ -142,6 +145,8 @@ async def loop():
         await asyncio.sleep(settings.scan_interval_seconds)
 @asynccontextmanager
 async def life(app):
+    from intelligence.model_team import inventory
+    logging.getLogger('uvicorn.error').info('NEXUS model team inventory %s',inventory())
     tasks=[asyncio.create_task(protection_loop()),asyncio.create_task(loop()),asyncio.create_task(stream_new_tokens()),asyncio.create_task(wallet_learning_loop()),asyncio.create_task(security_loop()),asyncio.create_task(bundle_loop()),asyncio.create_task(social_loop()),asyncio.create_task(wallet_signals_loop()),asyncio.create_task(research_loop())]
     try:
         yield
@@ -230,7 +235,8 @@ def connection_summary():
     models={}
     for provider in ('jev','laya','darwin','openai','gemini'):
         configured=bool(getattr(settings,provider+'_api_key') and getattr(settings,provider+'_endpoint'))
-        models[provider]=dict(CONNECTIONS.get(provider,{}),configured=configured)
+        from intelligence.model_team import STATUS as TEAM_STATUS
+        models[provider]=dict(TEAM_STATUS.get(provider) or CONNECTIONS.get(provider,{}),configured=configured,key_present=bool(getattr(settings,provider+'_api_key')),endpoint_present=bool(getattr(settings,provider+'_endpoint')))
         models[provider].setdefault('status','configured_untested' if configured else 'not_configured')
         if provider=='openai':
             from intelligence.openai_review import usage

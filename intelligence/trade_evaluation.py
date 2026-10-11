@@ -104,11 +104,23 @@ def metrics(items):
             'scope': 'Latest 5000 fills grouped by original position. Win rate excludes open remainders and legacy fills. Drawdown is completed-position realized drawdown, not intratrade equity drawdown.'}
 
 
+def provider_performance(book,items):
+    # Distinct completed positions per provider, not repeated reviews counted as wins.
+    outcomes={x['root_id']:x for x in items if x['complete'] and x['costed']};groups=defaultdict(set)
+    with store.conn() as c:rows=c.execute("SELECT trade_id,payload_json FROM learning_decisions WHERE book=? AND kind IN ('entry','exit_review') ORDER BY id DESC LIMIT 1000",(book,)).fetchall()
+    for r in rows:
+        if r['trade_id'] not in outcomes:continue
+        payload=json.loads(r['payload_json']);team=payload.get('team') or {}
+        for review in team.get('reviews',[]):
+            if review.get('status')=='verified_response':groups[review['provider']].add(r['trade_id'])
+    return [{'provider':name,'completed_positions':len(ids),'average_return_pct':sum(outcomes[i]['return_pct'] for i in ids)/len(ids),'win_rate_pct':100*sum(outcomes[i]['net_pnl_sol']>0 for i in ids)/len(ids),
+             'scope':'Observed results on positions reviewed by this model, not its standalone strategy, causal contribution or forecast calibration.'} for name,ids in groups.items()]
+
 def summary(book):
     items = positions(book)
     ensure()
     with store.conn() as c:
         rows = c.execute('SELECT kind,COUNT(*) n FROM learning_decisions WHERE book=? GROUP BY kind', (book,)).fetchall()
-    return {'metrics': metrics(items), 'recent_positions': items[-12:][::-1],
+    return {'provider_performance':provider_performance(book,items),'metrics': metrics(items), 'recent_positions': items[-12:][::-1],
             'recorded_decisions': {x['kind']: x['n'] for x in rows},
             'scope': 'Decision records are a dataset for evaluation; neither JEV nor Gemini weights are automatically trained.'}

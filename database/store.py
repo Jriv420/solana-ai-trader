@@ -50,6 +50,10 @@ class Store:
         x['exit_decision']=x['context'].get('exit_decision')
         x['partial_exit']=x['context'].get('partial_exit')
         x['paper_narrative_scaleout']=bool(x['context'].get('paper_narrative_scaleout'))
+        x['entry_team']=(x['context'].get('entry_team') or x['context'].get('fast') or {}).get('team')
+        x['execution_audit']=x['context'].get('execution_audit')
+        x['entry_execution']={'reason':x['context'].get('strategy') or 'Combined entry scores and deterministic risk gates','rules':x['context'].get('rules'),'combined_score':(x['context'].get('entry') or {}).get('combined_score'),'risk':x['context'].get('risk'),'scope':'Recorded buy-time inputs; historical missing model reviews remain unknown.'}
+        x['entry_method']=x['context'].get('strategy') or 'Original entry strategy'
         x['paper_scale_out_done']=bool(x['context'].get('paper_scale_out_done'))
         from intelligence.exit_learning import RUNNER,FEEDBACK
         if x.get('mint')==RUNNER:x['user_exit_feedback']=FEEDBACK
@@ -145,17 +149,25 @@ class Store:
             root=self.row(raw);legs=groups[root['id']]+[root]
             amount=sum(float(x['amount_sol']) for x in legs)
             realized=sum(float(x['pnl_sol'] or 0) for x in legs if x['status']=='closed')
-            fields=('id','amount_sol','exit_time','exit_market_cap_usd','exit_cap_is_fdv','pnl_sol','pnl_pct','exit_reason')
+            fields=('id','amount_sol','exit_time','exit_market_cap_usd','exit_cap_is_fdv','pnl_sol','pnl_pct','exit_reason','exit_decision','execution_audit')
             fills=[dict({k:x.get(k) for k in fields},fraction_of_remainder=(x.get('partial_exit') or {}).get('fraction',1),kind='partial sale' if x.get('partial_exit') else 'final exit') for x in legs if x['status']=='closed']
             fills.sort(key=lambda x:(x['exit_time'],x['id']))
             sold=sum(float(x['amount_sol']) for x in fills)
             caps_valid=bool(fills) and all(valid_cap(x['exit_market_cap_usd']) for x in fills) and len({bool(x['exit_cap_is_fdv']) for x in fills})==1
             average_cap=sum(float(x['exit_market_cap_usd'])*float(x['amount_sol']) for x in fills)/sold if sold and caps_valid else None
-            root['position_history']={'original_amount_sol':amount,'remaining_amount_sol':float(root['amount_sol']) if root['status']=='open' else 0,'realized_net_pnl_sol':realized,'return_pct':100*realized/amount if amount and root['status']=='closed' else None,'complete':root['status']=='closed','average_sell_market_cap_usd':average_cap,'average_sell_cap_is_fdv':bool(fills[0]['exit_cap_is_fdv']) if caps_valid else None,'fills':fills}
+            root['position_history']={'original_amount_sol':amount,'remaining_amount_sol':float(root['amount_sol']) if root['status']=='open' else 0,'realized_net_pnl_sol':realized,'return_pct':100*realized/amount if amount and root['status']=='closed' else None,'complete':root['status']=='closed','buys':[{'time':root['entry_time'],'amount_sol':amount,'market_cap_usd':root.get('entry_market_cap_usd'),'cap_is_fdv':bool(root.get('entry_cap_is_fdv')),'team':root.get('entry_team'),'method':root.get('entry_method')}],'average_entry_market_cap_usd':root.get('entry_market_cap_usd'),'average_entry_cap_is_fdv':bool(root.get('entry_cap_is_fdv')),'average_sell_market_cap_usd':average_cap,'average_sell_cap_is_fdv':bool(fills[0]['exit_cap_is_fdv']) if caps_valid else None,'fills':fills}
             if root['mint'] in previous:root['previous_entry']=previous[root['mint']]
             previous[root['mint']]={k:root.get(k) for k in ('id','entry_time','entry_market_cap_usd','entry_cap_is_fdv')}
             result.append({k:v for k,v in root.items() if k!='context'})
         return result[::-1]
+
+    def save_execution_audit(self,i,audit):
+        with self.conn() as c:
+            r=c.execute(f'SELECT context_json FROM {self.trade_table} WHERE id=? AND status="open"',(i,)).fetchone()
+            if not r:return False
+            context=json.loads(r['context_json'] or '{}');context['execution_audit']=audit
+            c.execute(f'UPDATE {self.trade_table} SET context_json=? WHERE id=?',(json.dumps(context),i))
+        return True
 
     def mark_peak(self,i,price):
         with self.conn() as c:c.execute(f'UPDATE {self.trade_table} SET peak_price_usd=MAX(COALESCE(peak_price_usd,entry_price_usd),?) WHERE id=? AND status="open"',(price,i))

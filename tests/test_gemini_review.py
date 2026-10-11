@@ -28,7 +28,7 @@ class GeminiReview(unittest.TestCase):
             with self.assertRaises(ValueError):ai.normalize_response(data)
         data=response();data['candidates'][0]['content']['parts'].append({'functionCall':{}})
         with self.assertRaises(ValueError):ai.normalize_response(data)
-        with self.assertRaises(ai.ReviewPaused):ai.request_body({'note':'x'*12001})
+        self.assertLess(len(json.dumps(ai.request_body({'research':{'note':'x'*12001}}))),12000)
     def test_header_contract_cache_spacing_and_persistent_cap(self):
         calls=[];original=httpx.AsyncClient
         def handler(request):

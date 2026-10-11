@@ -29,3 +29,5 @@
 .trade-card details{border-top:1px solid var(--l);margin-top:14px}.learning-card h3{font-size:17px;color:var(--t)}
 @media(max-width:700px){.stats strong{font-size:26px}.results-grid{gap:12px}.results-grid strong{font-size:23px}.trade-pnl strong{font-size:29px}.metrics strong{font-size:20px}.coin-identity h3{font-size:18px}}
 @media(max-width:480px){.coin-top{grid-template-columns:1fr;gap:16px}.metrics{text-align:left;gap:12px}.metrics small{font-size:10px}.metrics strong{font-size:21px}.coin-avatar{width:42px;height:42px}.coin-name{font-size:12px}.results-grid:not(.cap-grid){grid-template-columns:repeat(2,minmax(0,1fr))}.results-grid:not(.cap-grid)>div:first-child{grid-column:1/-1}.results-grid:not(.cap-grid)>div:first-child strong{font-size:30px}.cap-grid strong{font-size:25px}.refresh-note{font-size:10px}.secondary-info,.learning-card p,.learning-card li{font-size:12px}}
+
+.average-caps{grid-template-columns:repeat(2,minmax(0,1fr))}.average-caps>p{grid-column:1/-1;margin:0}.trade-timeline{overflow-wrap:anywhere}

@@ -63,7 +63,7 @@ const html=tradeCards([grouped]);
 assert(html.includes('Whole-trade realized net PnL'));
 assert(html.includes('0.0968 SOL'));
 assert(html.includes('Full trade history · 2 sales'));
-assert(html.includes('Average sell market cap:'));
+assert(html.includes('AVG EXIT'));assert(html.indexOf('AVG ENTRY')<html.indexOf('AVG EXIT'));
 assert(html.includes('$260K'));
 assert(html.includes('-0.0024 SOL'));
 assert(html.includes('25% of remainder'));

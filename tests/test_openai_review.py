@@ -26,7 +26,7 @@ class OpenAIReview(unittest.TestCase):
         with self.assertRaises(ValueError):ai.normalize_response(response(status='incomplete'))
         with self.assertRaises(ValueError):ai.normalize_response({'status':'completed','output':[
             {'type':'message','content':[{'type':'refusal'}]}]})
-        with self.assertRaises(ai.ReviewPaused):ai.request_body({'note':'x'*12001})
+        self.assertLess(len(json.dumps(ai.request_body({'research':{'note':'x'*12001}}))),12000)
     def test_quota_is_atomic_and_survives_store_recreation(self):
         self.assertTrue(db.Store().reserve_ai_request('openai','2026-10-10',1))
         self.assertFalse(db.Store().reserve_ai_request('openai','2026-10-10',1))

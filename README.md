@@ -234,3 +234,16 @@ Missing evidence is unknown; optional factor responses do not invalidate a valid
 exit action. Evidence and factor results are saved for review, not assumed to be
 correct training labels. Request-count caps remain unchanged; larger request
 payloads can change provider token usage.
+
+
+### Current model collaboration and trade history (model-team-v1)
+
+Both paper accounts now use bounded independent reviews from every model with a key AND endpoint. Gemini evaluates supplied narrative/social evidence; optional Laya, Darwin and OpenAI review opportunity/risk; JEV receives peer findings and selects its own action. Valid entry scores use normalized weights (JEV 0.5, Gemini 0.3, other providers share 0.2), with adverse entry action recommendations able to pause entry. Valid exit actions use the same normalized weights to select the nearest permitted holding fraction. Advisory-only scores are supplied to JEV and never fabricated into exit votes. Unavailable models are excluded explicitly. All-model unavailability uses a named deterministic fallback. Protective rules remain independent and take precedence. This replaces the earlier first-success provider chain for runtime trading.
+
+Exit actions permit every 10% increment, the existing 25% trim, hold, and full exit. Every partial sale applies once to the current remainder and requires a fresh review before another trim. JEV exit limit remains 300/day, Gemini uses its shared 100/day default and provider quotas, OpenAI its existing configured limit, and Laya/Darwin have 30 team attempts/day each. Limits include failed attempts and are persisted; no limit is a monetary budget.
+
+The dashboard shows AVG ENTRY left and AVG EXIT right, including on mobile, full position history, aggregate realized PnL, and per-sale model reviews and risk overrides. The executor currently creates one buy per position; repeated entries are separate positions. AVG ENTRY therefore equals that position's executed entry snapshot; AVG EXIT is weighted by the quantities represented by partial sale cost bases. Missing/mixed cap versus FDV data is never invented. Historical trades are not assigned fabricated model explanations.
+
+Model reviews and completed-position outcomes are logged for comparison. Per-model outcome summaries count distinct completed positions, not repeated reviews, and cannot isolate a provider's contribution. The existing frozen forward strategy tests and loss-pattern screens remain; no model-weight training, automatic unvalidated strategy promotion, live social-feed access or predictive-profit guarantee is claimed.
+
+Audit example: shadow position 106 (trenchcat) was entered through the older momentum benchmark, reviewed by JEV alone for exits, partially sold 25% at 21:19:55 UTC for -0.005534 SOL, then stopped at 21:20:15 UTC for -0.017483 SOL. The adapter recorded no provider explanation; the internal reason cannot be recovered or attributed to Gemini.
