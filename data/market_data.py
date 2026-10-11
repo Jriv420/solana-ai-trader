@@ -10,6 +10,7 @@ async def get_token_snapshot(mint):
     return {"mint":mint,"symbol":(x.get("baseToken") or {}).get("symbol") or mint[:6],
             "name":(x.get("baseToken") or {}).get("name") or "Unknown",
             "image_url":(x.get("info") or {}).get("imageUrl"),
+            "source_links":((x.get("info") or {}).get("websites",[])+(x.get("info") or {}).get("socials",[]))[:8],
             "price_usd":float(x.get("priceUsd") or 0),
             "market_cap_usd":float(x.get("marketCap") or x.get("fdv") or 0),
             "liquidity_usd":float((x.get("liquidity") or {}).get("usd") or 0),

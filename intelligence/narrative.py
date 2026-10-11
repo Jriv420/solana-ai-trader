@@ -5,6 +5,7 @@ from database.research import research
 from intelligence.wallet_learning import normalize_transaction
 from intelligence.market_regime import market_features
 from database.store import store
+from data.web_research import cached as web_context,safe_url
 
 
 def record_transaction(item,address):
@@ -58,6 +59,9 @@ def context(mint,token=None):
         observations=store.watch_history(mint=mint,limit=1)
         token=observations[0]['token'] if observations else None
     if token is not None:features.update(market_features(token,security),bundle_status=bundle['status'],branding_status=(token.get('identity_check') or {}).get('status','unknown'))
+    web=web_context(mint)
+    links=[dict(url=safe_url(x.get('url')),label=str(x.get('label') or x.get('type') or 'Project link')[:100]) for x in (token or {}).get('source_links',[]) if isinstance(x,dict) and safe_url(x.get('url'))]
+    features['web_evidence_status']=web['status']
     learning=research.learning(features)
     outcomes_by_horizon={h:research.learning(features,h) for h in ('5m','1h','24h')}
-    return {'claims':reviews,'events':events[:30],'security':security,'bundle':bundle,'features':features,'learning':learning,'outcomes_by_horizon':outcomes_by_horizon,'message':'User-reviewed source claims, not automatically authenticated endorsements. Token receipts may be unsolicited gifts or other transfers.'}
+    return {'web_research':dict(web,message='Untrusted search excerpts linked to this exact contract; not authenticated identity or endorsement. Indexed coverage is incomplete; timestamps are search time, not publication time.'),'project_links':links,'claims':reviews,'events':events[:30],'security':security,'bundle':bundle,'features':features,'learning':learning,'outcomes_by_horizon':outcomes_by_horizon,'message':'User-reviewed source claims, not automatically authenticated endorsements. Token receipts may be unsolicited gifts or other transfers.'}

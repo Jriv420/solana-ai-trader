@@ -4,10 +4,12 @@ from pathlib import Path
 DEFAULT_DB=Path(__file__).resolve().parent/"trades.sqlite3"
 DB=Path(os.getenv("DB_PATH") or (str(Path(os.environ["RAILWAY_VOLUME_MOUNT_PATH"])/"trades.sqlite3") if os.getenv("RAILWAY_VOLUME_MOUNT_PATH") else str(DEFAULT_DB)))
 class Store:
-    def __init__(self):
-        with self.conn() as c:c.execute('CREATE TABLE IF NOT EXISTS trades(id INTEGER PRIMARY KEY AUTOINCREMENT,mint TEXT,symbol TEXT,entry_price_usd REAL,exit_price_usd REAL,amount_sol REAL,entry_time REAL,exit_time REAL,status TEXT,pnl_pct REAL,pnl_sol REAL,exit_reason TEXT,context_json TEXT)')
+    def __init__(self,trade_table="trades"):
+        if trade_table not in {"trades","shadow_trades"}:raise ValueError("Invalid trade table")
+        self.trade_table=trade_table
+        with self.conn() as c:c.execute(f'CREATE TABLE IF NOT EXISTS {self.trade_table}(id INTEGER PRIMARY KEY AUTOINCREMENT,mint TEXT,symbol TEXT,entry_price_usd REAL,exit_price_usd REAL,amount_sol REAL,entry_time REAL,exit_time REAL,status TEXT,pnl_pct REAL,pnl_sol REAL,exit_reason TEXT,context_json TEXT)')
         with self.conn() as c:
-            if 'peak_price_usd' not in {r['name'] for r in c.execute('PRAGMA table_info(trades)')}:c.execute('ALTER TABLE trades ADD COLUMN peak_price_usd REAL')
+            if 'peak_price_usd' not in {r['name'] for r in c.execute(f'PRAGMA table_info({self.trade_table})')}:c.execute(f'ALTER TABLE {self.trade_table} ADD COLUMN peak_price_usd REAL')
     def conn(self):
         DB.parent.mkdir(parents=True,exist_ok=True)
         c=sqlite3.connect(DB,timeout=15);c.row_factory=sqlite3.Row;return c
@@ -31,33 +33,33 @@ class Store:
         x=dict(r);raw=x.pop("context_json",None);x["context"]=json.loads(raw) if raw else {};return x
     def create_trade(self,t):
         with self.conn() as c:
-            cur=c.execute('INSERT INTO trades(mint,symbol,entry_price_usd,amount_sol,entry_time,status,context_json) VALUES(?,?,?,?,?,"open",?)',(t["mint"],t.get("symbol"),t["entry_price_usd"],t["amount_sol"],t["entry_time"],json.dumps(t.get("context",{}))));t["id"]=cur.lastrowid
+            cur=c.execute(f'INSERT INTO {self.trade_table}(mint,symbol,entry_price_usd,amount_sol,entry_time,status,context_json) VALUES(?,?,?,?,?,"open",?)',(t["mint"],t.get("symbol"),t["entry_price_usd"],t["amount_sol"],t["entry_time"],json.dumps(t.get("context",{}))));t["id"]=cur.lastrowid
         return t
     def close_trade(self,i,price,tm,pct,sol,reason):
         with self.conn() as c:
-            result=c.execute("UPDATE trades SET exit_price_usd=?,exit_time=?,status='closed',pnl_pct=?,pnl_sol=?,exit_reason=? WHERE id=? AND status='open'",(price,tm,pct,sol,reason,i))
+            result=c.execute(f"UPDATE {self.trade_table} SET exit_price_usd=?,exit_time=?,status='closed',pnl_pct=?,pnl_sol=?,exit_reason=? WHERE id=? AND status='open'",(price,tm,pct,sol,reason,i))
             return bool(result.rowcount)
     def open(self):
-        with self.conn() as c:rows=c.execute("SELECT * FROM trades WHERE status='open'").fetchall()
+        with self.conn() as c:rows=c.execute(f"SELECT * FROM {self.trade_table} WHERE status='open'").fetchall()
         return [self.row(r) for r in rows]
     def all(self):
-        with self.conn() as c:rows=c.execute("SELECT * FROM trades ORDER BY entry_time DESC LIMIT 200").fetchall()
+        with self.conn() as c:rows=c.execute(f"SELECT * FROM {self.trade_table} ORDER BY entry_time DESC LIMIT 200").fetchall()
         return [self.row(r) for r in rows]
     def mark_peak(self,i,price):
-        with self.conn() as c:c.execute('UPDATE trades SET peak_price_usd=MAX(COALESCE(peak_price_usd,entry_price_usd),?) WHERE id=? AND status="open"',(price,i))
+        with self.conn() as c:c.execute(f'UPDATE {self.trade_table} SET peak_price_usd=MAX(COALESCE(peak_price_usd,entry_price_usd),?) WHERE id=? AND status="open"',(price,i))
     def daily_realized(self,now=None):
         now=time.time() if now is None else now
         start=datetime.fromtimestamp(now,timezone.utc).replace(hour=0,minute=0,second=0,microsecond=0).timestamp()
-        with self.conn() as c:r=c.execute('SELECT COALESCE(SUM(pnl_sol),0) p FROM trades WHERE exit_time>=? AND exit_time<=? AND status="closed"',(start,now)).fetchone()
+        with self.conn() as c:r=c.execute(f'SELECT COALESCE(SUM(pnl_sol),0) p FROM {self.trade_table} WHERE exit_time>=? AND exit_time<=? AND status="closed"',(start,now)).fetchone()
         return float(r['p'])
     def paper_metrics(self):
         with self.conn() as c:
-            rows=c.execute('SELECT pnl_sol,context_json FROM trades WHERE status="closed"').fetchall()
+            rows=c.execute(f'SELECT pnl_sol,context_json FROM {self.trade_table} WHERE status="closed"').fetchall()
         pnl=[float(r['pnl_sol'] or 0) for r in rows];n=len(pnl)
         fills=sum(bool(json.loads(r['context_json'] or '{}').get('paper_fill')) for r in rows)
         return {'closed_trades':n,'cost_model_trades':fills,'legacy_trades':n-fills,'win_rate_pct':round(100*sum(x>0 for x in pnl)/n,1) if n else None,'net_pnl_sol':sum(pnl),'daily_realized_sol':self.daily_realized(),'daily_window':'UTC calendar day','scope':'Simulated fills; not executable profit.'}
     def realized(self):
-        with self.conn() as c:r=c.execute("SELECT COALESCE(SUM(pnl_sol),0) p FROM trades WHERE status='closed'").fetchone()
+        with self.conn() as c:r=c.execute(f"SELECT COALESCE(SUM(pnl_sol),0) p FROM {self.trade_table} WHERE status='closed'").fetchone()
         return float(r["p"] or 0)
     def ensure_observations(self):
         with self.conn() as c:

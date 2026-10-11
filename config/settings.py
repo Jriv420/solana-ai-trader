@@ -54,6 +54,7 @@ class Settings:
     laya_api_key: str=os.getenv("LAYA_API_KEY","")
     laya_endpoint: str=os.getenv("LAYA_ENDPOINT","")
     laya_timeout_ms: int=_i("LAYA_TIMEOUT_MS",1200)
+    tavily_api_key: str=os.getenv("TAVILY_API_KEY","")
     darwin_api_key: str=os.getenv("DARWIN_API_KEY","")
     darwin_endpoint: str=os.getenv("DARWIN_ENDPOINT","")
     darwin_timeout_ms: int=_i("DARWIN_TIMEOUT_MS",5000)

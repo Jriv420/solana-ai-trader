@@ -3,8 +3,9 @@ from config.settings import settings
 from database.store import store
 
 class PaperTrader:
-    def open_positions(self):return store.open()
-    def balance_sol(self):return settings.paper_starting_sol+store.realized()-sum(float(p["amount_sol"]) for p in self.open_positions())
+    def __init__(self,book=None):self.store=book or store
+    def open_positions(self):return self.store.open()
+    def balance_sol(self):return settings.paper_starting_sol+self.store.realized()-sum(float(p["amount_sol"]) for p in self.open_positions())
     def buy(self,t,a,c):
         price=float(t.get('price_usd') or 0);sol_usd=float(t.get('sol_price_usd') or 0)
         if not 0<=time.time()-float(t.get('timestamp') or 0)<=120:return None
@@ -13,7 +14,7 @@ class PaperTrader:
         execution=price*(1+slip);notional=a/(1+fee)
         fill={'version':1,'entry_sol_price_usd':sol_usd,'quantity':notional*sol_usd/execution,'entry_fee_sol':a-notional,'fee_bps':fee*10000,'slippage_bps':slip*10000,'scope':'Estimated proportional fees/slippage; no execution guarantee.'}
         context=dict(c,paper_fill=fill)
-        return store.create_trade({"mint":t["mint"],"symbol":t.get("symbol"),"entry_price_usd":execution,"amount_sol":a,"entry_time":time.time(),"context":context})
+        return self.store.create_trade({"mint":t["mint"],"symbol":t.get("symbol"),"entry_price_usd":execution,"amount_sol":a,"entry_time":time.time(),"context":context})
     def sell(self,p,t,reason):
         price=float(t.get('price_usd') or 0);sol_usd=float(t.get('sol_price_usd') or 0)
         if not 0<=time.time()-float(t.get('timestamp') or 0)<=120:return False
@@ -26,5 +27,5 @@ class PaperTrader:
             # Preserve legacy positions without inventing historical cost or SOL prices.
             execution=price;proceeds=a*price/entry
         sol=proceeds-a;pct=100*sol/a
-        return store.close_trade(int(p['id']),execution,time.time(),pct,sol,reason)
+        return self.store.close_trade(int(p['id']),execution,time.time(),pct,sol,reason)
 paper_trader=PaperTrader()

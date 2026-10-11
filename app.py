@@ -14,6 +14,8 @@ from data.market_data import get_sol_price
 from data.wallet_signals import wallet_signals_loop
 from database.research import research
 from database.missed import missed
+from data.web_research import research_loop,usage as web_usage,search as web_search
+from paper.shadow import step as shadow_step,summary as shadow_summary
 from strategy.paper_exception import eligible as exception_eligible, decide as exception_decide
 from intelligence.narrative import context as narrative_context
 from data.security_research import security_loop, STATUS as SECURITY_STATUS
@@ -103,6 +105,8 @@ async def loop():
                 if isinstance(observation,Exception):continue
                 store.record_observation(observation)
                 observations.append(observation)
+            STATE["shadow"]=shadow_step(observations)
+            logging.getLogger('uvicorn.error').info('NEXUS shadow paper summary %s',STATE["shadow"])
             STATE["opportunities"]=observations
             reasons=Counter(reason for o in observations for reason in ((o.get('filter') or {}).get('reasons',[])+(o.get('entry') or {}).get('reasons',[])))
             diagnostic={'finished_at':time.time(),'checked':len(ts),'evaluated':len(observations),'evaluation_failures':STATE['evaluation_failures'],'failure_types':dict(Counter(type(x).__name__ for x in results if isinstance(x,Exception))),'statuses':dict(Counter(o.get('status','unknown') for o in observations)),'blockers':dict(reasons.most_common(8)),'paper_buys':sum('paper_action' in o for o in observations),'open_positions':len(paper_trader.open_positions()),'risk_trial_active':risk_trial_status()['active'],'model_assessments':dict(Counter(str(o['fast']['provider'])+': '+str(o['fast']['score']) for o in observations if o.get('fast')))}
@@ -116,7 +120,7 @@ async def loop():
         await asyncio.sleep(settings.scan_interval_seconds)
 @asynccontextmanager
 async def life(app):
-    tasks=[asyncio.create_task(loop()),asyncio.create_task(stream_new_tokens()),asyncio.create_task(wallet_learning_loop()),asyncio.create_task(security_loop()),asyncio.create_task(social_loop()),asyncio.create_task(wallet_signals_loop())]
+    tasks=[asyncio.create_task(loop()),asyncio.create_task(stream_new_tokens()),asyncio.create_task(wallet_learning_loop()),asyncio.create_task(security_loop()),asyncio.create_task(social_loop()),asyncio.create_task(wallet_signals_loop()),asyncio.create_task(research_loop())]
     try:
         yield
     finally:
@@ -130,7 +134,7 @@ def healthz():return {"ready":True}
 @app.get("/")
 async def home():return FileResponse(D/"index.html")
 @app.get("/api/status")
-async def status():return {"risk_trial":risk_trial_status(),"paper_mode":settings.paper_mode,"balance_sol":paper_trader.balance_sol(),"open_positions":paper_trader.open_positions(),"agents":STATE["agents"],"error":STATE.get("error"),"new_pairs_feed":dict(FEED),"paper_metrics":store.paper_metrics(),"missed_learning":STATE.get("missed_learning",{}),"scan":STATE.get("scan"),"scan_started_at":STATE.get("scan_started_at")}
+async def status():return {"shadow":shadow_summary(),"risk_trial":risk_trial_status(),"paper_mode":settings.paper_mode,"balance_sol":paper_trader.balance_sol(),"open_positions":paper_trader.open_positions(),"agents":STATE["agents"],"error":STATE.get("error"),"new_pairs_feed":dict(FEED),"paper_metrics":store.paper_metrics(),"missed_learning":STATE.get("missed_learning",{}),"scan":STATE.get("scan"),"scan_started_at":STATE.get("scan_started_at")}
 @app.get("/api/opportunities")
 async def opps():return STATE["opportunities"]
 @app.get("/api/trades")
@@ -194,7 +198,7 @@ def connection_summary():
         if provider=='gemini':
             from intelligence.gemini_review import usage
             models[provider].update(usage())
-    return {'models':models,'rpc':{'configured':bool(settings.solana_rpc_url),'status':WALLET_STATUS['discovery']},'helius':{'configured':bool(settings.helius_api_key),'status':WALLET_STATUS['learning']},'x':dict(SOCIAL_STATUS,configured=bool(settings.x_bearer_token)),'rugcheck':dict(SECURITY_STATUS),'storage':{'railway_volume_detected':persistent,'db_path':str(DB),'message':'Volume detected; verify memory survives a restart.' if persistent else 'Persistent Railway volume not detected; learning may reset on deployment.'},'paper_mode':settings.paper_mode,'live_execution_enabled':False}
+    return {'web_research':web_usage(),'models':models,'rpc':{'configured':bool(settings.solana_rpc_url),'status':WALLET_STATUS['discovery']},'helius':{'configured':bool(settings.helius_api_key),'status':WALLET_STATUS['learning']},'x':dict(SOCIAL_STATUS,configured=bool(settings.x_bearer_token)),'rugcheck':dict(SECURITY_STATUS),'storage':{'railway_volume_detected':persistent,'db_path':str(DB),'message':'Volume detected; verify memory survives a restart.' if persistent else 'Persistent Railway volume not detected; learning may reset on deployment.'},'paper_mode':settings.paper_mode,'live_execution_enabled':False}
 @app.get('/api/connections')
 async def connections():return connection_summary()
 @app.post('/api/connections/check')
@@ -249,3 +253,9 @@ async def trending(window: str = "5m"):
     return {"items":items[:100],"window":window if window in {'5m','1h','24h'} else '5m',"scope":"Recently scanned tokens; not the entire Solana market", "ranking":"70% volume rank + 30% market cap rank"}
 from dashboard_auth import install as install_auth
 install_auth(app,D)
+
+@app.post("/api/research/{mint}/search")
+async def search_sources(mint: str,request: Request):
+    check_wallet_write(request)
+    if not valid_address(mint):raise HTTPException(status_code=400,detail="Invalid contract address")
+    return await web_search(mint)
