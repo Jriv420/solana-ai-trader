@@ -163,7 +163,8 @@ def learning_summary():
     from intelligence.trade_evaluation import summary
     from intelligence.policy_trials import summary as trials
     from intelligence.entry_learning import summary as entries
-    value={name:dict(summary(book),trials=trials(book),entry_learning=entries(book)) for name,book in (('original','trades'),('aggressive','shadow_trades'))}
+    from intelligence.strategy_evolution import summary as evolution
+    value={name:dict(summary(book),trials=trials(book),entry_learning=entries(book),evolution=evolution(book)) for name,book in (('original','trades'),('aggressive','shadow_trades'))}
     _learning_cache.clear();_learning_cache[key]=(time.time(),value)
     return value
 

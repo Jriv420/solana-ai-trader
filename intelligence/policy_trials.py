@@ -19,17 +19,20 @@ def ensure():
 
 def start(book, trade_id, token, amount, execution, fill, entry_time):
     ensure()
-    for policy in POLICIES:
+    from intelligence.strategy_evolution import enroll
+    candidates = [(key, dict(rules), None) for key, rules in POLICIES.items()] + enroll(book, token['mint'])
+    for policy, rules, evolution in candidates:
         state = {'version': VERSION, 'entry_price': execution, 'amount_sol': amount,
                  'quantity': fill['quantity'], 'remaining': 1, 'proceeds_sol': 0,
                  'fee_bps': fill['fee_bps'], 'slippage_bps': fill['slippage_bps'],
                  'peak': execution, 'scaled_out': False, 'complete': False,
                  'last_sample_at': None, 'samples': 0}
+        state.update(rules=rules, evolution=evolution or {})
         with store.conn() as c:
             c.execute('INSERT OR IGNORE INTO policy_trials VALUES(?,?,?,?,?,?)',
                       (book, trade_id, policy, token['mint'], entry_time, json.dumps(state)))
             # Bound storage. Evicted incomplete comparisons have no invented outcome.
-            c.execute("DELETE FROM policy_trials WHERE rowid IN (SELECT rowid FROM policy_trials ORDER BY entry_time DESC LIMIT -1 OFFSET 4000)")
+            c.execute("DELETE FROM policy_trials WHERE rowid IN (SELECT rowid FROM policy_trials ORDER BY entry_time DESC LIMIT -1 OFFSET 8000)")
 
 
 def observe(token):
@@ -41,7 +44,8 @@ def observe(token):
     with store.conn() as c:
         rows = c.execute("SELECT rowid,* FROM policy_trials WHERE mint=? AND json_extract(payload_json,'$.complete')=0", (token['mint'],)).fetchall()
         for row in rows:
-            state = json.loads(row['payload_json']); rules = POLICIES[row['policy']]
+            state = json.loads(row['payload_json']); rules = state.get('rules') or POLICIES.get(row['policy'])
+            if not rules: continue
             if stamp < row['entry_time'] or stamp <= (state['last_sample_at'] or 0):
                 continue
             state.update(last_sample_at=stamp, samples=state['samples'] + 1, peak=max(state['peak'], price))
@@ -49,14 +53,14 @@ def observe(token):
             peak_gain = 100 * (state['peak'] / state['entry_price'] - 1)
             danger = bool(((token.get('research') or {}).get('security') or {}).get('danger'))
             reason = None; fraction = 0
-            if danger or gain <= -20 or stamp - row['entry_time'] >= 86400:
+            if danger or gain <= -20 or stamp - row['entry_time'] >= rules.get('max_hold_seconds', 86400):
                 reason = 'security' if danger else 'hard stop' if gain <= -20 else 'maximum hold'
                 fraction = state['remaining']
-            elif 100 * (price / state['peak'] - 1) <= -rules['trail'] and (not rules['partial'] or peak_gain >= 50):
+            elif 100 * (price / state['peak'] - 1) <= -rules['trail'] and peak_gain >= rules.get('trail_arm', 50 if rules.get('partial') else 0):
                 reason = 'trailing stop'; fraction = state['remaining']
             elif gain >= rules['take_profit'] and not state['scaled_out']:
-                fraction = state['remaining'] * (.5 if rules['partial'] else 1)
-                reason = 'partial profit' if rules['partial'] else 'take profit'
+                fraction = state['remaining'] * rules.get('partial_fraction', .5 if rules.get('partial') else 1)
+                reason = 'partial profit' if fraction < state['remaining'] else 'take profit'
                 state['scaled_out'] = True
             if fraction:
                 state['proceeds_sol'] += state['quantity'] * fraction * price * (1 - state['slippage_bps'] / 10000) / sol * (1 - state['fee_bps'] / 10000)
@@ -77,6 +81,8 @@ def safe_start(*args):
 def safe_observe(token):
     try:
         observe(token)
+        from intelligence.strategy_evolution import tick
+        tick()
     except Exception as exc:
         logging.getLogger('uvicorn.error').warning('NEXUS policy trial observation unavailable %s', type(exc).__name__)
 
@@ -102,5 +108,5 @@ def summary(book):
                        'awaiting_price': sum(not s['complete'] and time.time() - (s['last_sample_at'] or r['entry_time']) > 120 for r, s in trials),
                        'status': 'candidate_for_review' if better else 'not_better_on_gate' if enough else 'collecting_evidence'})
     return {'version': VERSION, 'policies': output,
-            'scope': 'Prospective exit comparisons on identical new paper entries; no orders, extra model calls or market requests. Observations may stop after the actual exit; missing prices stay pending; storage retains the latest 4000 trials across accounts. Estimated costs, not executable fills. Different hold times mean portfolio capacity and future entry availability are not simulated.',
+            'scope': 'Prospective exit comparisons on identical new paper entries; no orders, extra model calls or market requests. Observations may stop after the actual exit; missing prices stay pending; storage retains the latest 8000 trials across accounts. Estimated costs, not executable fills. Different hold times mean portfolio capacity and future entry availability are not simulated.',
             'promotion': 'No automatic policy replacement. Requires at least 50 paired completed positions, 20 distinct coins, 7 elapsed days and entries on 7 UTC dates before reviewing net profit and realized drawdown. This gate is evidence screening, not proof of superiority.'}

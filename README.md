@@ -200,3 +200,37 @@ To audit missed winners as well as avoided losses, the first eligible screen per
 `PAPER_DAILY_LOSS_LIMIT_ENABLED=false` disables the daily realized-loss pause in both paper entry paths without resetting history or balance. It cannot disable a live-trading daily loss limit. Sizing, position caps, security checks, severe-loss contract cooldowns and protective exits still apply. `PAPER_TEST_UNTIL` sets the persistent aggressive entry deadline; `PAPER_RISK_TRIAL_UNTIL` controls the original account's temporary trial rules. Dashboard and logs expose whether the paper daily pause is enabled.
 
 SUPMKT's October 11 collapse screenshot is saved once as a suspected activity label and provided to current AI entry/exit reviews through activity evidence. The general example distinguishes the visible collapse from the user's unverified no-dip-buyers/fake-volume claims. It does not rewrite old entries, authenticate engagement or prove wash trading; later user labels can replace it. Models receive the example in evidence, not weight training.
+
+### Prospective exit evolution
+
+The paper learner runs eight bounded exit candidates (defensive, scalp, balanced,
+runner) alongside actual entries. Five genes control profit threshold, sale
+fraction, trailing width, trailing activation and maximum hold. Costs and observed
+price gaps count; trials never create orders or change account balances. Existing
+trials retain their original rules. No new data-provider requests are introduced.
+
+Training requires 50 common completed distinct-contract comparisons across seven
+UTC entry dates. The training winner and family parents are frozen. Validation
+uses future entries in contracts never enrolled in that generation's training,
+requiring 25 completed contracts across three entry dates. Only the frozen winner
+is judged; validation does not select parents. Positive net profit, improvement
+over actual exits on the same entries, profit factor above one (or positive wins
+without losses) and no greater completed-position realized drawdown screen a
+candidate for review. This is not a portfolio backtest or significance test.
+
+A completed generation breeds one bounded mutation of each family's training
+winner plus one newcomer per family. Policies that pass fresh validation become
+limited evidence for future AI exit reviews; they do not replace trading rules
+automatically. No JEV/Gemini weights are trained. Different hold times and liquidity
+constraints are not fully simulated. Missing observations remain pending; 8,000
+trial rows and the latest 31 generation summaries per account bound storage.
+The finite paper entry window still applies; enough active entry dates are needed
+before validation can complete. See AI Agents → Learning & strategy tests.
+
+JEV exit requests now include four independent typed judgments: participation,
+activity quality, narrative support and whether the entry thesis remains intact.
+They share the same supplied state and API request with the action question.
+Missing evidence is unknown; optional factor responses do not invalidate a valid
+exit action. Evidence and factor results are saved for review, not assumed to be
+correct training labels. Request-count caps remain unchanged; larger request
+payloads can change provider token usage.
