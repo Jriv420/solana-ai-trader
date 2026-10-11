@@ -32,18 +32,32 @@ async def check_token(mint):
         research.check(mint,{'status':'unavailable','risks':[],'failure_type':reason,'message':'RugCheck unavailable ('+reason+'); security is not cleared.'});STATUS.update(rugcheck='unavailable',last_failure_type=reason)
         logging.getLogger('uvicorn.error').warning('NEXUS security report unavailable: %s',reason)
 
+def next_check(items,open_mints=(),now=None):
+    """Pick from reports already due; a cached head must not stall the queue."""
+    now=time.time() if now is None else now
+    due=[]
+    for x in items:
+        t=x['token'];mint=t.get('mint','')
+        if now-x.get('last_seen',0)>=600 or not valid_address(mint):continue
+        cached=research.security(mint)
+        ttl=300 if cached['status']=='ok' else 60
+        checked=cached.get('checked_at',0)
+        if now-checked<=ttl:continue
+        fresh=0<=now-float(t.get('timestamp') or 0)<=120
+        liquid=float(t.get('liquidity_usd') or 0)>=min(5000,trading_settings().min_liquidity_usd)
+        momentum=fresh and liquid and float(t.get('volume_5m_usd') or 0)>=2000 and float(t.get('price_change_5m_pct') or 0)>=5 and int(t.get('buys_5m') or 0)>int(t.get('sells_5m') or 0)
+        due.append(((mint not in open_mints,not momentum,not liquid,checked),mint))
+    return min(due)[1] if due else None
+
 async def security_loop():
     while True:
         try:
             items=store.watch_history(limit=100)
-            eligible=[x['token'] for x in items if time.time()-x.get('last_seen',0)<600 and valid_address(x['token'].get('mint',''))]
-            # At most one report every ten seconds, cache success for five minutes.
-            # Check actionable market data first instead of spending all checks on thin launches.
-            eligible.sort(key=lambda t:(float(t.get('liquidity_usd') or 0)<trading_settings().min_liquidity_usd,
-                                        research.security(t['mint']).get('checked_at',0)))
-            if eligible:
-                t=eligible[0];cached=research.security(t['mint']);ttl=300 if cached['status']=='ok' else 60
-                if time.time()-cached.get('checked_at',0)>ttl:await check_token(t['mint'])
+            from paper.shadow import BOOK
+            open_mints={p['mint'] for p in store.open()+BOOK.open()}
+            # Same request budget: open positions, then fresh momentum candidates.
+            mint=next_check(items,open_mints)
+            if mint:await check_token(mint)
         except Exception as exc:
             STATUS.update(rugcheck='unavailable',last_failure_type=type(exc).__name__)
             logging.getLogger('uvicorn.error').warning('NEXUS security loop failure: %s',type(exc).__name__)
