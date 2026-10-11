@@ -9,6 +9,15 @@ from intelligence.gemini_review import ask_gemini
 
 INTERVAL=120
 DAILY_JEV_LIMIT=300
+FACTOR_QUESTIONS={
+    'participation': 'Does supplied recent buy/sell flow and liquidity support continued participation?',
+    'activity_quality': 'Does supplied activity evidence corroborate genuine participation rather than suspected artificial activity?',
+    'narrative_support': 'Does supplied contemporaneous sourced evidence support the narrative thesis? Retrospective feedback and transfers are not endorsement.',
+    'thesis_intact': 'Does current supplied evidence still support the reason recorded at entry?'}
+FACTOR_CRITERIA={'supported':'Available evidence supports this proposition; important limitations remain.',
+                 'mixed':'Available evidence conflicts or is weak.',
+                 'adverse':'Available evidence contradicts this proposition.',
+                 'unknown':'Necessary evidence is missing or stale; do not invent it.'}
 ACTIONS=[
     ('hold','Hold the remaining position: current evidence supports waiting through ordinary volatility; review again shortly.'),
     ('sell_25','Sell 25% of the remaining position: take some profit or reduce uncertainty while retaining upside.'),
@@ -21,7 +30,16 @@ def normalize_jev_exit(data):
     a=(data.get('answers') or {}).get('exit') or {};choice=a.get('choice')
     if a.get('type')!='choice' or choice not in {x[0] for x in ACTIONS}:raise ValueError('Invalid exit action')
     reason=a.get('reason') or a.get('explanation')
-    return {'action':choice,'reason':reason[:1000] if isinstance(reason,str) else 'JEV selected this action from the supplied exit evidence; provider returned no explanation.'}
+    factors={}
+    for key in FACTOR_QUESTIONS:
+        value=(data.get('answers') or {}).get(key) or {}
+        if value.get('type')=='choice' and value.get('choice') in FACTOR_CRITERIA:
+            factors[key]={'assessment':value['choice']}
+            confidence=value.get('confidence')
+            if isinstance(confidence,(int,float)) and not isinstance(confidence,bool) and math.isfinite(confidence) and 0<=confidence<=1:
+                factors[key]['model_confidence']=confidence
+    return {'action':choice,'reason':reason[:1000] if isinstance(reason,str) else 'JEV selected this action from the supplied exit evidence; provider returned no explanation.',
+            'factors':factors,'confidence_scope':'Model certainty, not probability of a profitable trade.'}
 
 def evidence(book,p,t):
     history=store.watch_history(limit=8,mint=p['mint'])
@@ -38,10 +56,11 @@ def evidence(book,p,t):
         outcomes.append(dict({k:x[k] for k in ('root_id','mint','symbol','entry_time','exit_time','amount_sol','net_pnl_sol','return_pct','entry_market_cap_usd','exit_reason','features')},after_exit_review=review(book.trade_table,x['root_id'])))
         if len(outcomes)>=12:break
     research=t.get('research') or {}
+    from intelligence.strategy_evolution import lesson
     state={'task':'paper_exit','mint':p['mint'],'book':book.trade_table,'position':{k:p.get(k) for k in ('id','symbol','entry_price_usd','entry_time','amount_sol','peak_price_usd','entry_market_cap_usd')},
            'entry_evidence':{k:(p.get('context',{}).get('entry_evidence') or p.get('context',{}).get('token') or {}).get(k) for k in keys},
            'current':{k:t.get(k) for k in keys},'research':research,'recent_market_samples':recent,'protective_price_samples':p.get('risk_samples',[]),
-           'past_completed_positions':outcomes,'previous_decision':p.get('exit_decision'),
+           'past_completed_positions':outcomes,'previous_decision':p.get('exit_decision'),'forward_tested_exit_lesson':lesson(book.trade_table),
            'memory_scope':'Costed completed positions group all partial fills and the final remainder. Open positions are excluded from win-rate lessons; no model-weight training.'}
     # Keep market facts and outcome memory; bound verbose source text.
     if len(json.dumps(state,default=str).encode())>11000:
@@ -85,7 +104,7 @@ async def decide(book,p,t):
                   market_cap_usd=t.get('market_cap_usd'),review_interval_seconds=INTERVAL,consumed=False)
     if not book.save_exit_decision(p['id'],decision):return {'exit':False,'reason':'position already closed'}
     from intelligence.trade_evaluation import snapshot,safe_record
-    safe_record(book.trade_table,p['id'],p['mint'],'exit_review',{'provider':provider,'action':result['action'],'reason':result['reason'],'failures':failures,'evidence':snapshot(t),'position':state['position']})
+    safe_record(book.trade_table,p['id'],p['mint'],'exit_review',{'provider':provider,'action':result['action'],'reason':result['reason'],'failures':failures,'factors':result.get('factors',{}),'evidence':snapshot(t),'decision_state':state,'position':state['position']})
     logging.getLogger('uvicorn.error').info('NEXUS adaptive exit book=%s trade=%s provider=%s action=%s',book.trade_table,p['id'],provider,result['action'])
     if failures:logging.getLogger('uvicorn.error').info('NEXUS exit review availability book=%s trade=%s failures=%s',book.trade_table,p['id'],failures)
     if d['exit'] and not book.consume_exit_decision(p['id'],decision['id']):return {'exit':False,'reason':'exit decision already consumed'}
