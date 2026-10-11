@@ -42,4 +42,4 @@ def review(book,trade_id):
 def context(mint):
     ensure()
     with store.conn() as c:rows=c.execute('SELECT book,trade_id FROM exit_reviews WHERE mint=? ORDER BY exit_time DESC LIMIT 5',(mint,)).fetchall()
-    return {'recent_exits':[review(r['book'],r['trade_id']) for r in rows],'user_feedback':FEEDBACK if mint==RUNNER else None,'scope':'Observational feedback only. Fixed exits remain active; models are not retrained.'}
+    return {'recent_exits':[review(r['book'],r['trade_id']) for r in rows],'user_feedback':FEEDBACK if mint==RUNNER else None,'scope':'Observed feedback for future AI exit reviews; retrospective user labels are unverified. Models are not retrained.'}

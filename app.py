@@ -16,7 +16,7 @@ from database.research import research
 from database.missed import missed
 from intelligence.activity import save as save_activity,comparison as activity_comparison
 from data.web_research import research_loop,usage as web_usage,search as web_search
-from paper.shadow import step as shadow_step,summary as shadow_summary
+from paper.shadow import step as shadow_step,summary as shadow_summary,manage_exits as shadow_exits,BOOK as shadow_book
 from strategy.paper_exception import eligible as exception_eligible, decide as exception_decide
 from intelligence.narrative import context as narrative_context
 from data.security_research import security_loop, STATUS as SECURITY_STATUS
@@ -31,7 +31,7 @@ from intelligence.risk_ai import score_contextual_risk
 from intelligence.token_identity import annotate as annotate_identity
 from strategy.token_filter import evaluate_token
 from strategy.entry import should_enter
-from strategy.exit import should_exit
+from intelligence.exit_policy import decide as exit_decision
 from data.narrative_trends import summary as narrative_trend_summary
 from strategy.sizing import position_size_sol
 from strategy.risk import hard_risk_check
@@ -95,8 +95,12 @@ async def loop():
                 if token:
                     store.mark_peak(position['id'],token.get('price_usd') or 0)
                     token=dict(token,research=narrative_context(token['mint'],token))
-                    decision=should_exit(position,token)
+                    decision=await exit_decision(store,position,token)
                     if decision['exit']:paper_trader.sell(position,token,decision['reason'],fraction=decision.get('fraction',1))
+            # Both accounts review exits before entry scoring can consume provider time.
+            shadow_mints={p['mint'] for p in shadow_book.open()}
+            shadow_tokens=[{'token':dict(t,research=narrative_context(t['mint'],t))} for t in ts if t['mint'] in shadow_mints]
+            await shadow_exits(shadow_tokens)
             STATE["missed_learning"]=missed.summary()
             observations=[]
             semaphore=asyncio.Semaphore(4)
@@ -110,7 +114,7 @@ async def loop():
                 from intelligence.exit_learning import observe as observe_exit
                 observe_exit(observation['token'])
                 observations.append(observation)
-            STATE["shadow"]=shadow_step(observations)
+            STATE["shadow"]=shadow_step(observations,process_exits=False)
             logging.getLogger('uvicorn.error').info('NEXUS shadow paper summary %s',STATE["shadow"])
             STATE["opportunities"]=observations
             reasons=Counter(reason for o in observations for reason in ((o.get('filter') or {}).get('reasons',[])+(o.get('entry') or {}).get('reasons',[])))

@@ -19,7 +19,10 @@ def usage():
 def request_body(state):
     # Share evidence limits and conservative instructions with the OpenAI adapter.
     body=openai_body(state)
-    return {'systemInstruction':{'parts':[{'text':body['instructions']}]},
+    if state.get('task')=='paper_exit':
+        from intelligence.exit_policy import PROMPT,ACTIONS
+        body['instructions']=PROMPT
+    result={'systemInstruction':{'parts':[{'text':body['instructions']}]},
             'contents':[{'role':'user','parts':[{'text':body['input']}]}],
             'generationConfig':{'candidateCount':1,'maxOutputTokens':1000,
                 'thinkingConfig':{'thinkingLevel':'LOW','includeThoughts':False},
@@ -27,8 +30,11 @@ def request_body(state):
                 'responseSchema':{'type':'OBJECT','properties':{
                     'score':{'type':'NUMBER','minimum':0,'maximum':100},
                     'reason':{'type':'STRING'}},'required':['score','reason']}}}
+    if state.get('task')=='paper_exit':
+        result['generationConfig']['responseSchema']={'type':'OBJECT','properties':{'action':{'type':'STRING','enum':[a[0] for a in ACTIONS]},'reason':{'type':'STRING'}},'required':['action','reason']}
+    return result
 
-def normalize_response(data):
+def normalize_response(data,exit_mode=False):
     if not isinstance(data,dict) or data.get('promptFeedback',{}).get('blockReason'):
         raise ValueError('Blocked response')
     candidates=data.get('candidates',[])
@@ -37,6 +43,10 @@ def normalize_response(data):
     # Never treat internal thinking or a tool call as the returned review.
     if any('functionCall' in p for p in parts):raise ValueError('Unexpected tool call')
     answer=json.loads(''.join(p.get('text','') for p in parts if not p.get('thought')))
+    if exit_mode:
+        from intelligence.exit_policy import ACTIONS
+        if answer.get('action') not in {a[0] for a in ACTIONS} or not isinstance(answer.get('reason'),str):raise ValueError('Invalid exit review')
+        return {'action':answer['action'],'reason':answer['reason'][:1000]}
     score=answer.get('score');reason=answer.get('reason')
     if (not isinstance(score,(int,float)) or isinstance(score,bool) or not math.isfinite(score)
         or not 0<=score<=100 or not isinstance(reason,str)):raise ValueError('Invalid review')
@@ -48,10 +58,11 @@ async def ask_gemini(state):
     if not settings.gemini_api_key:raise ReviewPaused('not_configured')
     if settings.gemini_daily_request_limit<=0:raise ReviewPaused('daily_limit_reached')
     if not re.fullmatch(r'gemini-[a-zA-Z0-9.-]+',settings.gemini_model):raise ReviewPaused('invalid_model')
-    key=state.get('mint');body=request_body(state)
+    exit_mode=state.get('task')=='paper_exit'
+    key=('exit',state.get('book'),(state.get('position') or {}).get('id')) if exit_mode else state.get('mint');body=request_body(state)
     async with _semaphore:
         now=time.time();cached=_reviews.get(key)
-        if key and cached and now-cached[0]<900:return dict(cached[1],cached=True)
+        if key and cached and now-cached[0]<(120 if exit_mode else 900):return dict(cached[1],cached=True)
         if now<_blocked_until:raise ReviewPaused('cooldown')
         day=datetime.now(timezone.utc).date().isoformat()
         if not store.reserve_ai_request('gemini',day,settings.gemini_daily_request_limit):
@@ -69,7 +80,7 @@ async def ask_gemini(state):
         if response.status_code in (401,403):raise ReviewPaused('key_or_access_rejected')
         if response.status_code==404:raise ReviewPaused('model_unavailable')
         response.raise_for_status()
-        result=normalize_response(response.json())
+        result=normalize_response(response.json(),exit_mode=exit_mode)
         if key:
             _reviews[key]=(time.time(),result)
             if len(_reviews)>1000:_reviews.pop(min(_reviews,key=lambda k:_reviews[k][0]))

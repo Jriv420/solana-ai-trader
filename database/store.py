@@ -46,6 +46,7 @@ class Store:
             t=x['context'].get('entry_evidence') or x['context'].get('token') or {}
             cap=valid_cap(t.get('market_cap_usd'))
             if cap is not None:x.update(entry_market_cap_usd=cap,entry_cap_is_fdv=bool(t.get('market_cap_is_fdv')))
+        x['exit_decision']=x['context'].get('exit_decision')
         x['partial_exit']=x['context'].get('partial_exit')
         x['paper_narrative_scaleout']=bool(x['context'].get('paper_narrative_scaleout'))
         x['paper_scale_out_done']=bool(x['context'].get('paper_scale_out_done'))
@@ -70,7 +71,7 @@ class Store:
             r=c.execute(f'SELECT * FROM {self.trade_table} WHERE id=? AND status="open"',(p['id'],)).fetchone()
             if not r or r['amount_sol']!=p['amount_sol']:return None
             context=json.loads(r['context_json'] or '{}')
-            if context.get('paper_scale_out_done'):return None
+            if context.get('paper_scale_out_done') and not reason.startswith('AI exit'):return None
             closed_context=dict(context,partial_exit={'parent_trade_id':p['id'],'fraction':fraction})
             remaining_context=dict(context,paper_scale_out_done=True)
             if context.get('paper_fill'):
@@ -83,6 +84,28 @@ class Store:
             cur=c.execute(f'INSERT INTO {self.trade_table}({",".join(keys)}) VALUES({",".join("?" for _ in keys)})',tuple(closed[k] for k in keys))
             c.execute(f'UPDATE {self.trade_table} SET amount_sol=?,context_json=? WHERE id=?',(r['amount_sol']*(1-fraction),json.dumps(remaining_context),p['id']))
             return cur.lastrowid
+    def save_exit_decision(self,i,decision):
+        with self.conn() as c:
+            c.execute('BEGIN IMMEDIATE')
+            r=c.execute(f'SELECT context_json FROM {self.trade_table} WHERE id=? AND status="open"',(i,)).fetchone()
+            if not r:return False
+            context=json.loads(r['context_json'] or '{}');context['exit_decision']=decision
+            c.execute(f'UPDATE {self.trade_table} SET context_json=? WHERE id=?',(json.dumps(context),i))
+            c.execute('CREATE TABLE IF NOT EXISTS exit_decisions(id TEXT PRIMARY KEY,book TEXT,trade_id INTEGER,checked_at REAL,payload_json TEXT)')
+            c.execute('INSERT INTO exit_decisions VALUES(?,?,?,?,?)',(decision['id'],self.trade_table,i,decision['checked_at'],json.dumps(decision)))
+            c.execute('DELETE FROM exit_decisions WHERE id NOT IN (SELECT id FROM exit_decisions ORDER BY checked_at DESC LIMIT 2000)')
+        return True
+    def consume_exit_decision(self,i,decision_id):
+        # Persist before applying: a restart cannot replay the same partial sale.
+        with self.conn() as c:
+            c.execute('BEGIN IMMEDIATE')
+            r=c.execute(f'SELECT context_json FROM {self.trade_table} WHERE id=? AND status="open"',(i,)).fetchone()
+            if not r:return False
+            context=json.loads(r['context_json'] or '{}');d=context.get('exit_decision') or {}
+            if d.get('id')!=decision_id or d.get('consumed'):return False
+            d['consumed']=True
+            c.execute(f'UPDATE {self.trade_table} SET context_json=? WHERE id=?',(json.dumps(context),i))
+        return True
     def open(self):
         with self.conn() as c:rows=c.execute(f"SELECT * FROM {self.trade_table} WHERE status='open'").fetchall()
         return [self.row(r) for r in rows]
