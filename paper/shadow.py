@@ -54,16 +54,24 @@ def step(observations,process_exits=True):
         if d['exit']:TRADER.sell(p,t,d['reason'],fraction=d.get('fraction',1))
     blockers=Counter();buys=0
     active=settings.paper_mode and now<meta['ends_at']
-    if active:
+    daily=BOOK.daily_realized(now)
+    pause=[]
+    if not settings.paper_mode:pause.append('Paper trading disabled')
+    elif not active:pause.append('Entry window ended')
+    if daily<=-.15:pause.append('Daily realized loss limit reached (0.15 SOL)')
+    if len(BOOK.open())>=3:pause.append('Maximum 3 open positions reached')
+    if active and not pause:
         candidates=sorted(by.values(),key=lambda t:float(t.get('volume_5m_usd') or 0),reverse=True)
         for t in candidates:
             ok,why=eligible(t,now)
             if not ok:blockers[why]+=1;continue
             positions=BOOK.open()
             if t['mint'] in {p['mint'] for p in positions}:continue
-            if len(positions)>=3 or BOOK.daily_realized()<=-.15:break
+            if len(positions)>=3:
+                blockers['maximum open positions reached']+=1;break
             with store.conn() as c:last=c.execute('SELECT MAX(entry_time) n FROM shadow_trades WHERE mint=?',(t['mint'],)).fetchone()['n']
-            if last and now-last<3600:continue
+            if last and now-last<3600:
+                blockers['same contract entry cooldown (1 hour)']+=1;continue
             from intelligence.entry_learning import safe_assess,safe_screen
             learning=safe_assess('shadow_trades',t)
             safe_screen('shadow_trades',t,learning)
@@ -76,7 +84,7 @@ def step(observations,process_exits=True):
             amount=position_size_sol(strength,TRADER.balance_sol())
             if amount>0 and TRADER.buy(t,amount,{'strategy':'aggressive momentum benchmark','entry_evidence':t,'rules':{'min_liquidity':5000,'min_volume_5m':2000,'min_change_5m':5,'buys_over_sells':True,'wallet_or_ai_required':False}}):buys+=1
             else:blockers['balance or fresh fill unavailable']+=1
-    STATE.update(active=active,paper_buys=buys,blockers=dict(blockers),checked_at=now)
+    STATE.update(active=active,paper_buys=buys,blockers=dict(blockers),checked_at=now,entry_pause_reasons=pause,daily_realized_sol=daily,daily_loss_limit_sol=.15,daily_limit_resets_at=(int(now//86400)+1)*86400)
     return dict(STATE)
 
 def summary():
