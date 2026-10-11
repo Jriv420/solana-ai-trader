@@ -18,7 +18,10 @@
 <label>Source link<input id="research-source" type="url" maxlength="500" placeholder="https://x.com/... or other primary source"></label>
 <label>Notes<input id="research-note" maxlength="500" placeholder="What was sent or claimed?"></label>
 <button type="submit">Save evidence</button><p id="research-message" role="status"></p>
-</form></div></section>
+</form>
+<h3>Volume &amp; engagement review</h3><p class="muted">Use the coin contract above. Your review stays separate from provider evidence and does not automatically block paper trades.</p>
+<form id="activity-form"><label>Volume<select id="activity-volume"><option value="unknown">Unknown / clear my previous label</option><option value="suspected">Suspected manipulation</option><option value="genuine">Appears genuine to me</option></select></label><label>Engagement<select id="activity-engagement"><option value="unknown">Unknown / clear my previous label</option><option value="suspected">Suspected fake or bot engagement</option><option value="genuine">Appears genuine to me</option></select></label><label>Source (optional)<input id="activity-source" type="url" maxlength="500" placeholder="https://..."></label><label>What did you observe?<input id="activity-note" maxlength="500" placeholder="Repeated bot replies, linked wallets, unusual chart..."></label><button type="submit">Save activity review</button><p id="activity-message" role="status"></p></form>
+</div></section>
 <section id="wallet-manager" hidden>
 <div class="card"><h2>Wallet tracking</h2><p class="muted">Discover strong traders automatically, or add a public wallet yourself.</p>
 <form id="wallet-form"><label>Public wallet address<input id="wallet-address" required minlength="32" maxlength="44" autocomplete="off" placeholder="Solana wallet address"></label><label>Name (optional)<input id="wallet-label" maxlength="100" placeholder="Wallet label"></label><button type="submit">Add wallet</button><p id="wallet-form-message" role="status"></p></form>
