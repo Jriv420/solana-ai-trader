@@ -39,7 +39,8 @@ def review(book,trade_id):
     if not r:return None
     x=dict(r);base=x['baseline']
     return {'samples':x['samples'],'peak_after_exit_pct':round((x['peak']/base-1)*100,1),'low_after_exit_pct':round((x['low']/base-1)*100,1),'last_after_exit_pct':round((x['last']/base-1)*100,1),'complete':time.time()-x['exit_time']>=3600,'scope':'One-hour sampled spot-price changes after exit; no fees, hypothetical trade return or guarantee. Missing samples stay missing.'}
+RISK_CASE={'mint':'Go1EM5gL1bSjfYZLi1idz2C5iAFx6b1RGe9uR3ipump','symbol':'GTA 6 Coin','entry_market_cap_usd':441500,'exit_market_cap_usd':90400,'realized_pnl_pct':-80.3,'exit_reason':'hard stop','user_report':'Sharp dip toward zero; possible bundling, unverified.','lesson':'A -20% trigger did not cap this observed paper loss. Consider price gaps, concentration, liquidity and monitoring delay; do not infer a verified bundle or learn that all dips recover.','scope':'Retrospective incident from dashboard and confirmed exit log; exact intraperiod price path and cause are unverified.'}
 def context(mint):
     ensure()
     with store.conn() as c:rows=c.execute('SELECT book,trade_id FROM exit_reviews WHERE mint=? ORDER BY exit_time DESC LIMIT 5',(mint,)).fetchall()
-    return {'recent_exits':[review(r['book'],r['trade_id']) for r in rows],'user_feedback':FEEDBACK if mint==RUNNER else None,'scope':'Observed feedback for future AI exit reviews; retrospective user labels are unverified. Models are not retrained.'}
+    return {'execution_risk_case':RISK_CASE,'recent_exits':[review(r['book'],r['trade_id']) for r in rows],'user_feedback':FEEDBACK if mint==RUNNER else None,'scope':'Observed feedback for future AI exit reviews; retrospective user labels are unverified. Models are not retrained.'}
