@@ -14,6 +14,7 @@ from data.market_data import get_sol_price
 from data.wallet_signals import wallet_signals_loop
 from database.research import research
 from database.missed import missed
+from intelligence.activity import save as save_activity,comparison as activity_comparison
 from data.web_research import research_loop,usage as web_usage,search as web_search
 from paper.shadow import step as shadow_step,summary as shadow_summary
 from strategy.paper_exception import eligible as exception_eligible, decide as exception_decide
@@ -134,7 +135,7 @@ def healthz():return {"ready":True}
 @app.get("/")
 async def home():return FileResponse(D/"index.html")
 @app.get("/api/status")
-async def status():return {"shadow":shadow_summary(),"risk_trial":risk_trial_status(),"paper_mode":settings.paper_mode,"balance_sol":paper_trader.balance_sol(),"open_positions":paper_trader.open_positions(),"agents":STATE["agents"],"error":STATE.get("error"),"new_pairs_feed":dict(FEED),"paper_metrics":store.paper_metrics(),"missed_learning":STATE.get("missed_learning",{}),"scan":STATE.get("scan"),"scan_started_at":STATE.get("scan_started_at")}
+async def status():return {"activity_learning":activity_comparison(),"shadow":shadow_summary(),"risk_trial":risk_trial_status(),"paper_mode":settings.paper_mode,"balance_sol":paper_trader.balance_sol(),"open_positions":paper_trader.open_positions(),"agents":STATE["agents"],"error":STATE.get("error"),"new_pairs_feed":dict(FEED),"paper_metrics":store.paper_metrics(),"missed_learning":STATE.get("missed_learning",{}),"scan":STATE.get("scan"),"scan_started_at":STATE.get("scan_started_at")}
 @app.get("/api/opportunities")
 async def opps():return STATE["opportunities"]
 @app.get("/api/trades")
@@ -259,3 +260,21 @@ async def search_sources(mint: str,request: Request):
     check_wallet_write(request)
     if not valid_address(mint):raise HTTPException(status_code=400,detail="Invalid contract address")
     return await web_search(mint)
+
+
+class ActivityInput(BaseModel):
+    volume: Literal['unknown','suspected','genuine'] = 'unknown'
+    engagement: Literal['unknown','suspected','genuine'] = 'unknown'
+    source_url: str = Field(default='',max_length=500)
+    note: str = Field(default='',max_length=500)
+
+@app.post('/api/research/{mint}/activity')
+async def label_activity(mint: str,label: ActivityInput,request: Request):
+    check_wallet_write(request)
+    if not valid_address(mint):raise HTTPException(status_code=400,detail='Invalid contract address')
+    url=urlsplit(label.source_url)
+    if label.source_url and (url.scheme!='https' or not url.netloc or url.username or url.password):raise HTTPException(status_code=400,detail='Use a public HTTPS source link')
+    save_activity(mint,label.model_dump())
+    from intelligence.decision_engine import _CACHE
+    _CACHE.pop(mint,None)
+    return {'saved':True,'provenance':'user_reported_unverified','applies_to':'future observations only'}

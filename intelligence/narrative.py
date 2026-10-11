@@ -5,6 +5,7 @@ from database.research import research
 from intelligence.wallet_learning import normalize_transaction
 from intelligence.market_regime import market_features
 from database.store import store
+from intelligence.activity import context as activity_context
 from data.web_research import cached as web_context,safe_url
 
 
@@ -62,6 +63,8 @@ def context(mint,token=None):
     web=web_context(mint)
     links=[dict(url=safe_url(x.get('url')),label=str(x.get('label') or x.get('type') or 'Project link')[:100]) for x in (token or {}).get('source_links',[]) if isinstance(x,dict) and safe_url(x.get('url'))]
     features['web_evidence_status']=web['status']
+    activity=activity_context(mint,token or {},security,bundle)
+    features.update(activity_volume=activity['volume_class'],activity_engagement=activity['engagement_class'])
     learning=research.learning(features)
     outcomes_by_horizon={h:research.learning(features,h) for h in ('5m','1h','24h')}
-    return {'web_research':dict(web,message='Untrusted search excerpts linked to this exact contract; not authenticated identity or endorsement. Indexed coverage is incomplete; timestamps are search time, not publication time.'),'project_links':links,'claims':reviews,'events':events[:30],'security':security,'bundle':bundle,'features':features,'learning':learning,'outcomes_by_horizon':outcomes_by_horizon,'message':'User-reviewed source claims, not automatically authenticated endorsements. Token receipts may be unsolicited gifts or other transfers.'}
+    return {'activity':activity,'web_research':dict(web,message='Untrusted search excerpts linked to this exact contract; not authenticated identity or endorsement. Indexed coverage is incomplete; timestamps are search time, not publication time.'),'project_links':links,'claims':reviews,'events':events[:30],'security':security,'bundle':bundle,'features':features,'learning':learning,'outcomes_by_horizon':outcomes_by_horizon,'message':'User-reviewed source claims, not automatically authenticated endorsements. Token receipts may be unsolicited gifts or other transfers.'}
