@@ -39,7 +39,7 @@ class AdaptiveExits(unittest.IsolatedAsyncioTestCase):
             rows=self.book.all();self.assertAlmostEqual(sum(r['amount_sol'] for r in rows),.1)
             self.assertAlmostEqual(sum(r['context']['paper_fill']['quantity'] for r in rows),.1/(1+settings.paper_fee_bps/10000)*100/(1+settings.paper_slippage_bps/10000))
             captured=ai.evidence(self.book,self.book.open()[0],token)
-            self.assertEqual(len(captured['past_closed_fills']),2);self.assertIn('exit_review',captured['past_closed_fills'][0])
+            self.assertEqual(len(captured['past_completed_positions']),0)  # Two profitable partial fills do not make a completed winning position.
     async def test_protective_limits_override_ai_and_stale_prices_do_not_call_ai(self):
         with patch.object(ai,'ask_jev',AsyncMock()) as call:
             self.assertEqual((await ai.decide(self.book,self.book.open()[0],dict(self.t,price_usd=.7)))['reason'],'hard stop')

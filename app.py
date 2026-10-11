@@ -90,6 +90,9 @@ async def loop():
             ts=annotate_identity(await scan_tokens(),[x['token'] for x in store.watch_history(limit=2000)])
             sol_price=await get_sol_price()
             for token in ts:token["sol_price_usd"]=sol_price
+            from intelligence.policy_trials import safe_observe
+            for token in ts:
+                safe_observe(dict(token,research={'security':research.security(token['mint'])}))
             by={t['mint']:t for t in ts}
             # Process exits before entries so risk limits use the latest realized balance.
             for position in paper_trader.open_positions():
@@ -144,8 +147,24 @@ app.mount("/static",StaticFiles(directory=D),name="static")
 def healthz():return {"ready":True}
 @app.get("/")
 async def home():return FileResponse(D/"index.html")
+_learning_cache={}
+def learning_summary():
+    import database.store as db
+    key=str(db.DB);cached=_learning_cache.get(key)
+    if cached and time.time()-cached[0]<15:return cached[1]
+    from intelligence.trade_evaluation import summary
+    from intelligence.policy_trials import summary as trials
+    value={name:dict(summary(book),trials=trials(book)) for name,book in (('original','trades'),('aggressive','shadow_trades'))}
+    _learning_cache.clear();_learning_cache[key]=(time.time(),value)
+    return value
+
+@app.get('/api/learning/decisions')
+async def learning_decisions(account: Literal['original','aggressive']='aggressive',limit: int=50):
+    from intelligence.trade_evaluation import dataset
+    return {'records':dataset('trades' if account=='original' else 'shadow_trades',limit),'scope':'Observed outcomes are not correct-action training labels; no automatic model training. Future outcomes are separate from decision-time evidence.'}
+
 @app.get("/api/status")
-async def status():return {"protection":dict(protection_status),"narrative_trends":narrative_trend_summary(),"activity_learning":activity_comparison(),"shadow":shadow_summary(),"risk_trial":risk_trial_status(),"paper_mode":settings.paper_mode,"balance_sol":paper_trader.balance_sol(),"open_positions":paper_trader.open_positions(),"agents":STATE["agents"],"error":STATE.get("error"),"new_pairs_feed":dict(FEED),"paper_metrics":store.paper_metrics(),"missed_learning":STATE.get("missed_learning",{}),"scan":STATE.get("scan"),"scan_started_at":STATE.get("scan_started_at")}
+async def status():return {"learning":learning_summary(),"protection":dict(protection_status),"narrative_trends":narrative_trend_summary(),"activity_learning":activity_comparison(),"shadow":shadow_summary(),"risk_trial":risk_trial_status(),"paper_mode":settings.paper_mode,"balance_sol":paper_trader.balance_sol(),"open_positions":paper_trader.open_positions(),"agents":STATE["agents"],"error":STATE.get("error"),"new_pairs_feed":dict(FEED),"paper_metrics":store.paper_metrics(),"missed_learning":STATE.get("missed_learning",{}),"scan":STATE.get("scan"),"scan_started_at":STATE.get("scan_started_at")}
 @app.get("/api/opportunities")
 async def opps():return STATE["opportunities"]
 @app.get("/api/trades")

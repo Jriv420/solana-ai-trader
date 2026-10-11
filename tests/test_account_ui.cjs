@@ -46,3 +46,8 @@ console.log('Paper account UI switching checks passed');
  assert.equal(node('balance').textContent,'0.9600 SOL');
  console.log('Fresh account balances update even when a feed fails');
 })().catch(e=>{console.error(e);process.exitCode=1;});
+vm.runInContext(`
+status.learning={original:{metrics:{completed_positions:7,win_rate_pct:42.9},recorded_decisions:{entry:3}},aggressive:{metrics:{completed_positions:2,win_rate_pct:50},recorded_decisions:{entry:8}}};
+paperAccount='aggressive';assert(learningView().includes('2 completed positions'));assert(learningView().includes('50.0%'));assert(learningView().includes('account=aggressive'));
+paperAccount='original';assert(learningView().includes('7 completed positions'));assert(learningView().includes('42.9%'));assert(learningView().includes('account=original'));paperAccount='aggressive';
+`,context);

@@ -31,16 +31,18 @@ def evidence(book,p,t):
         token=h.get('token') or {};recent.append({k:token.get(k) for k in keys})
     # Bounded past outcomes in the same account. Partial legs are not independent trades.
     outcomes=[]
-    for x in sorted(book.all(),key=lambda x:x.get('exit_time') or 0,reverse=True):
-        if x['status']!='closed':continue
-        outcomes.append({k:x.get(k) for k in ('mint','entry_time','exit_time','entry_market_cap_usd','exit_market_cap_usd','pnl_pct','pnl_sol','exit_reason','partial_exit','exit_review')})
+    from intelligence.trade_evaluation import positions
+    for x in sorted(positions(book.trade_table),key=lambda x:x.get('exit_time') or 0,reverse=True):
+        if not x['complete'] or not x['costed']:continue
+        from intelligence.exit_learning import review
+        outcomes.append(dict(x,after_exit_review=review(book.trade_table,x['root_id'])))
         if len(outcomes)>=12:break
     research=t.get('research') or {}
     state={'task':'paper_exit','mint':p['mint'],'book':book.trade_table,'position':{k:p.get(k) for k in ('id','symbol','entry_price_usd','entry_time','amount_sol','peak_price_usd','entry_market_cap_usd')},
            'entry_evidence':{k:(p.get('context',{}).get('entry_evidence') or p.get('context',{}).get('token') or {}).get(k) for k in keys},
            'current':{k:t.get(k) for k in keys},'research':research,'recent_market_samples':recent,'protective_price_samples':p.get('risk_samples',[]),
-           'past_closed_fills':outcomes,'previous_decision':p.get('exit_decision'),
-           'memory_scope':'Bounded observed outcomes and evidence condition each decision; no model-weight training. Partial fills share their parent trade.'}
+           'past_completed_positions':outcomes,'previous_decision':p.get('exit_decision'),
+           'memory_scope':'Costed completed positions group all partial fills and the final remainder. Open positions are excluded from win-rate lessons; no model-weight training.'}
     # Keep market facts and outcome memory; bound verbose source text.
     if len(json.dumps(state,default=str).encode())>11000:
         state['research']={k:research.get(k) for k in ('security','bundle','features','narrative_rotation','exit_learning','activity')}
@@ -82,6 +84,8 @@ async def decide(book,p,t):
     decision=dict(result,id=uuid.uuid4().hex,checked_at=time.time(),provider=provider,failures=failures,
                   market_cap_usd=t.get('market_cap_usd'),review_interval_seconds=INTERVAL,consumed=False)
     if not book.save_exit_decision(p['id'],decision):return {'exit':False,'reason':'position already closed'}
+    from intelligence.trade_evaluation import snapshot,safe_record
+    safe_record(book.trade_table,p['id'],p['mint'],'exit_review',{'provider':provider,'action':result['action'],'reason':result['reason'],'failures':failures,'evidence':snapshot(t),'position':state['position']})
     logging.getLogger('uvicorn.error').info('NEXUS adaptive exit book=%s trade=%s provider=%s action=%s',book.trade_table,p['id'],provider,result['action'])
     if failures:logging.getLogger('uvicorn.error').info('NEXUS exit review availability book=%s trade=%s failures=%s',book.trade_table,p['id'],failures)
     if d['exit'] and not book.consume_exit_decision(p['id'],decision['id']):return {'exit':False,'reason':'exit decision already consumed'}
