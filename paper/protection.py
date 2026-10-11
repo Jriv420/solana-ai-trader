@@ -25,6 +25,8 @@ async def check_positions():
         t=dict(t,sol_price_usd=sol,research=context(p['mint'],t))
         from intelligence.policy_trials import safe_observe
         safe_observe(t)
+        from intelligence.entry_learning import safe_observe as observe_entry
+        observe_entry(t)
         book.mark_peak(p['id'],t.get('price_usd') or 0)
         book.record_risk_sample(p['id'],t)
         d=should_exit(p,t,protective_only=True)
