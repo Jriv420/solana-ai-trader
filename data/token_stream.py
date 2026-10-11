@@ -108,6 +108,8 @@ async def scan_tokens():
     from database.missed import missed
     selected += missed.mints()
     selected += research.mints()
+    from paper.shadow import BOOK
+    selected += [p['mint'] for p in BOOK.open()]
     selected += list(settings.watchlist_mints) + [p['mint'] for p in store.open()]
     semaphore = asyncio.Semaphore(5)
     async def fetch(mint):
