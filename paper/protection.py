@@ -23,6 +23,8 @@ async def check_positions():
         t=by.get(p['mint'])
         if not t:continue
         t=dict(t,sol_price_usd=sol,research=context(p['mint'],t))
+        from intelligence.policy_trials import safe_observe
+        safe_observe(t)
         book.mark_peak(p['id'],t.get('price_usd') or 0)
         book.record_risk_sample(p['id'],t)
         d=should_exit(p,t,protective_only=True)

@@ -48,7 +48,7 @@ class ActivityTests(unittest.TestCase):
     def test_paper_results_use_entry_evidence_and_isolate_accounts(self):
         a={'volume_class':'user_suspected','engagement_class':'unknown'}
         book=Store('shadow_trades')
-        t=book.create_trade({'mint':MINT,'symbol':'TEST','entry_price_usd':1,'amount_sol':.05,'entry_time':100,'context':{'entry_evidence':{'research':{'activity':a}}}})
+        t=book.create_trade({'mint':MINT,'symbol':'TEST','entry_price_usd':1,'amount_sol':.05,'entry_time':100,'context':{'paper_fill':{'version':1},'entry_evidence':{'research':{'activity':a}}}})
         book.close_trade(t['id'],1.2,200,20,.01,'test')
         activity.save(MINT,{'volume':'genuine','engagement':'genuine'})
         groups=activity.comparison()['paper_results']

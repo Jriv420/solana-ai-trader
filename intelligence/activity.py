@@ -58,15 +58,14 @@ def comparison(horizon='1h'):
         result.append({'volume':volume,'engagement':engagement,'distinct_coins':n,'median_return_pct':round(median(x['return_pct'] for x in values),2),'gain_50_pct':round(100*sum(x['peak_pct']>=50 for x in values)/n,1),'sharp_dip_pct':round(100*sum(x['drawdown_pct']<=-30 for x in values)/n,1)})
     paper=[]
     for table,account in (('trades','Original AI strategy'),('shadow_trades','Aggressive momentum')):
-        with store.conn() as c:
-            exists=c.execute("SELECT 1 FROM sqlite_master WHERE type='table' AND name=?",(table,)).fetchone()
-            trades=c.execute(f"SELECT status,pnl_sol,COALESCE(json_extract(context_json,'$.entry_evidence.research.activity.volume_class'),json_extract(context_json,'$.token.research.activity.volume_class'),'unknown') volume_class,COALESCE(json_extract(context_json,'$.entry_evidence.research.activity.engagement_class'),json_extract(context_json,'$.token.research.activity.engagement_class'),'unknown') engagement_class FROM {table} ORDER BY entry_time DESC LIMIT 5000").fetchall() if exists else []
+        from intelligence.trade_evaluation import positions,metrics
         grouped=defaultdict(list)
-        for trade in trades:
-            grouped[(trade['volume_class'],trade['engagement_class'])].append(trade)
+        for position in positions(table):
+            a=position.get('activity') or {}
+            grouped[(a.get('volume_class','unknown'),a.get('engagement_class','unknown'))].append(position)
         for (volume,engagement),items in grouped.items():
-            closed=[x for x in items if x['status']=='closed']
-            paper.append({'account':account,'volume':volume,'engagement':engagement,'closed_trades':len(closed),'open_trades':sum(x['status']=='open' for x in items),'net_pnl_sol':sum(x['pnl_sol'] or 0 for x in closed),'win_rate_pct':round(100*sum((x['pnl_sol'] or 0)>0 for x in closed)/len(closed),1) if closed else None})
-    output={'horizon':horizon,'groups':result,'paper_results':paper,'paper_scope':'Latest 5000 trades per account, grouped by evidence at entry; later labels do not relabel old trades. Realized paper PnL excludes open positions. Legacy fills may lack cost estimates.','scope':'Forward sampled price outcomes, not trade PnL or causal proof. One earliest case per coin per group; labels never rewrite old cases. Coins may enter different groups over time. Missing outcomes stay missing.'}
+            m=metrics(items)
+            paper.append({'account':account,'volume':volume,'engagement':engagement,'closed_trades':m['completed_positions'],'open_trades':m['open_positions'],'net_pnl_sol':m['net_pnl_sol'],'win_rate_pct':m['win_rate_pct']})
+    output={'horizon':horizon,'groups':result,'paper_results':paper,'paper_scope':'Latest 5000 fills grouped into positions by evidence at entry. Partial sells plus the final remainder count once. Completed-position results exclude open remainders and legacy fills. Later labels do not relabel old trades.','scope':'Forward sampled price outcomes, not trade PnL or causal proof. One earliest case per coin per group; labels never rewrite old cases. Coins may enter different groups over time. Missing outcomes stay missing.'}
     _cache[cache_key]=(time.time(),output)
     return output

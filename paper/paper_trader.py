@@ -18,7 +18,13 @@ class PaperTrader:
         evidence=t.get('research') or {}
         policy=bool((evidence.get('narrative_rotation') or {}).get('small_cap_rotation_candidate') or ((evidence.get('exit_learning') or {}).get('user_feedback') or {}).get('moonbag_candidate'))
         context=dict(c,paper_fill=fill,paper_narrative_scaleout=policy)
-        return self.store.create_trade({"mint":t["mint"],"symbol":t.get("symbol"),"entry_price_usd":execution,"amount_sol":a,"entry_time":time.time(),"context":context,"market_cap_usd":t.get("market_cap_usd"),"market_cap_is_fdv":t.get("market_cap_is_fdv",False)})
+        entered=time.time()
+        trade_id=self.store.create_trade({"mint":t["mint"],"symbol":t.get("symbol"),"entry_price_usd":execution,"amount_sol":a,"entry_time":entered,"context":context,"market_cap_usd":t.get("market_cap_usd"),"market_cap_is_fdv":t.get("market_cap_is_fdv",False)})
+        from intelligence.trade_evaluation import snapshot,safe_record
+        from intelligence.policy_trials import safe_start
+        safe_record(self.store.trade_table,trade_id['id'],t['mint'],'entry',{'action':'buy','amount_sol':a,'evidence':snapshot(t),'cost_model':fill})
+        safe_start(self.store.trade_table,trade_id['id'],t,a,execution,fill,entered)
+        return trade_id
     def sell(self,p,t,reason,fraction=1):
         # A protective task may have closed/reduced this position while AI awaited.
         # This synchronous reload and write have no async interleaving point.
@@ -44,11 +50,15 @@ class PaperTrader:
             if child:
                 from intelligence.exit_learning import start
                 start(self.store.trade_table,child,t)
+                from intelligence.trade_evaluation import snapshot,safe_record
+                safe_record(self.store.trade_table,p['id'],t['mint'],'fill',{'action':'partial_sell','fraction':fraction,'pnl_sol':sol,'reason':reason,'evidence':snapshot(t)})
             return bool(child)
         closed=self.store.close_trade(int(p['id']),execution,time.time(),pct,sol,reason,t.get('market_cap_usd'),t.get('market_cap_is_fdv',False))
         if closed:
             from intelligence.exit_learning import start
             start(self.store.trade_table,int(p['id']),t)
+            from intelligence.trade_evaluation import snapshot,safe_record
+            safe_record(self.store.trade_table,p['id'],t['mint'],'fill',{'action':'sell_all','pnl_sol':sol,'reason':reason,'evidence':snapshot(t)})
         if closed:logging.getLogger('uvicorn.error').info('NEXUS paper exit book=%s symbol=%s mint=%s pnl_sol=%.6f reason=%s',self.store.trade_table,p.get('symbol'),p['mint'],sol,reason)
         return closed
 paper_trader=PaperTrader()

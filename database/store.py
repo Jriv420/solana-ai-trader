@@ -137,7 +137,9 @@ class Store:
             rows=c.execute(f'SELECT pnl_sol,context_json FROM {self.trade_table} WHERE status="closed"').fetchall()
         pnl=[float(r['pnl_sol'] or 0) for r in rows];n=len(pnl)
         fills=sum(bool(json.loads(r['context_json'] or '{}').get('paper_fill')) for r in rows)
-        return {'closed_trades':n,'cost_model_trades':fills,'legacy_trades':n-fills,'win_rate_pct':round(100*sum(x>0 for x in pnl)/n,1) if n else None,'net_pnl_sol':sum(pnl),'daily_realized_sol':self.daily_realized(),'daily_window':'UTC calendar day','scope':'Simulated fills; not executable profit.'}
+        from intelligence.trade_evaluation import positions,metrics
+        position_metrics=metrics(positions(self.trade_table))
+        return {'position_metrics':position_metrics,'fill_win_rate_pct':round(100*sum(x>0 for x in pnl)/n,1) if n else None,'closed_trades':n,'cost_model_trades':fills,'legacy_trades':n-fills,'win_rate_pct':position_metrics['win_rate_pct'],'net_pnl_sol':sum(pnl),'daily_realized_sol':self.daily_realized(),'daily_window':'UTC calendar day','scope':'Simulated fills; not executable profit.'}
     def realized(self):
         with self.conn() as c:r=c.execute(f"SELECT COALESCE(SUM(pnl_sol),0) p FROM {self.trade_table} WHERE status='closed'").fetchone()
         return float(r["p"] or 0)
