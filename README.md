@@ -250,3 +250,6 @@ Audit example: shadow position 106 (trenchcat) was entered through the older mom
 
 
 Continuous paper mode uses `PAPER_CONTINUOUS=true` to remove the aggressive account entry deadline. It does not enable live orders or waive protective position limits. `JEV_EXIT_DAILY_LIMIT` controls the persisted shared daily exit-review cap (default 300). The deployment is configured for 6000/day, sufficient for up to eight positions reviewed every two minutes (5760 reviews/day), excluding provider throttling, failures and delays. Hosted service uptime and provider credits/quotas still apply; no 365-day uptime or free-service guarantee is made.
+
+
+Darwin Compute uses `DARWIN_ENDPOINT=https://darwincompute.com/v1/chat/completions`, `DARWIN_MODEL=darwin` and a Darwin key via Bearer authorization. The native adapter sends bounded chat-completion messages and validates a complete JSON result. Actual routed model/rung are taken from documented `x-darwin-model` / `x-darwin-rung` headers, or returned model metadata. Darwin is a routing service, not another foundation model; its route may overlap with another reviewer and is not assumed statistically independent. HTTP 402 is shown as `darwin_credits_required` and enters a cooldown; the bot does not purchase/burn tokens or link provider keys. See https://darwincompute.com/docs .

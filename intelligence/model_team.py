@@ -54,7 +54,7 @@ def normalized(name,response,mode,state):
     if mode=='entry' and score is None:raise ValueError('No valid setup score')
     return {'provider':name,'role':ROLES[name],'status':'verified_response','action':action,'score':score,'confidence':certainty,
             'reason':reason[:1000] if isinstance(reason,str) and reason else 'Provider returned no explanation; its internal reasoning is unavailable.',
-            'reason_source':'provider' if isinstance(reason,str) and reason and 'provider returned no explanation' not in reason else 'unavailable','factors':response.get('factors',{}),'cached':bool(response.get('cached')),
+            'reason_source':'provider' if isinstance(reason,str) and reason and 'provider returned no explanation' not in reason else 'unavailable','factors':response.get('factors',{}),'actual_model':response.get('actual_model'),'routing_rung':response.get('routing_rung'),'cached':bool(response.get('cached')),
             'checked_at':time.time(),'evidence':{'market':state.get('current') or {k:state.get(k) for k in FIELDS[3:13]},'calculated_metrics':state.get('calculated_metrics'),'source_scope':'Only supplied evidence; no independent live X/Pump feed or verified endorsement.'}}
 
 async def review(name,state,mode,call=None):
@@ -82,8 +82,8 @@ async def review(name,state,mode,call=None):
         _CACHE[key]=(time.time(),result)
         if len(_CACHE)>1000:_CACHE.pop(min(_CACHE,key=lambda k:_CACHE[k][0]))
     except Exception as exc:result={'provider':name,'role':ROLES[name],'status':getattr(exc,'status',type(exc).__name__),'checked_at':time.time()}
-    STATUS[name]={'status':result['status'],'checked_at':result['checked_at'],'task':mode,'cached':result.get('cached',False)}
-    logging.getLogger('uvicorn.error').info('NEXUS model team provider=%s task=%s status=%s action=%s score=%s',name,mode,result['status'],result.get('action'),result.get('score'))
+    STATUS[name]={'status':result['status'],'checked_at':result['checked_at'],'task':mode,'cached':result.get('cached',False),'actual_model':result.get('actual_model'),'routing_rung':result.get('routing_rung')}
+    logging.getLogger('uvicorn.error').info('NEXUS model team provider=%s task=%s status=%s action=%s score=%s routed_model=%s',name,mode,result['status'],result.get('action'),result.get('score'),result.get('actual_model'))
     return result
 
 def weights(reviews):
