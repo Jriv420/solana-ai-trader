@@ -20,6 +20,7 @@ from paper.shadow import step as shadow_step,summary as shadow_summary,manage_ex
 from strategy.paper_exception import eligible as exception_eligible, decide as exception_decide
 from intelligence.narrative import context as narrative_context
 from data.security_research import security_loop, STATUS as SECURITY_STATUS
+from data.bundle_research import bundle_loop, STATUS as BUNDLE_STATUS
 from typing import Literal
 from data.tracked_wallets import get_tracked_wallet_holders, valid_address, configured_wallets, _cache as wallet_balance_cache
 from data.wallet_discovery import wallet_learning_loop, STATUS as WALLET_STATUS
@@ -130,7 +131,7 @@ async def loop():
         await asyncio.sleep(settings.scan_interval_seconds)
 @asynccontextmanager
 async def life(app):
-    tasks=[asyncio.create_task(protection_loop()),asyncio.create_task(loop()),asyncio.create_task(stream_new_tokens()),asyncio.create_task(wallet_learning_loop()),asyncio.create_task(security_loop()),asyncio.create_task(social_loop()),asyncio.create_task(wallet_signals_loop()),asyncio.create_task(research_loop())]
+    tasks=[asyncio.create_task(protection_loop()),asyncio.create_task(loop()),asyncio.create_task(stream_new_tokens()),asyncio.create_task(wallet_learning_loop()),asyncio.create_task(security_loop()),asyncio.create_task(bundle_loop()),asyncio.create_task(social_loop()),asyncio.create_task(wallet_signals_loop()),asyncio.create_task(research_loop())]
     try:
         yield
     finally:
@@ -208,7 +209,7 @@ def connection_summary():
         if provider=='gemini':
             from intelligence.gemini_review import usage
             models[provider].update(usage())
-    return {'web_research':web_usage(),'models':models,'rpc':{'configured':bool(settings.solana_rpc_url),'status':WALLET_STATUS['discovery']},'helius':{'configured':bool(settings.helius_api_key),'status':WALLET_STATUS['learning']},'x':dict(SOCIAL_STATUS,configured=bool(settings.x_bearer_token)),'rugcheck':dict(SECURITY_STATUS),'storage':{'railway_volume_detected':persistent,'db_path':str(DB),'message':'Volume detected; verify memory survives a restart.' if persistent else 'Persistent Railway volume not detected; learning may reset on deployment.'},'paper_mode':settings.paper_mode,'live_execution_enabled':False}
+    return {'web_research':web_usage(),'models':models,'rpc':{'configured':bool(settings.solana_rpc_url),'status':WALLET_STATUS['discovery']},'helius':{'configured':bool(settings.helius_api_key),'status':WALLET_STATUS['learning']},'x':dict(SOCIAL_STATUS,configured=bool(settings.x_bearer_token)),'rugcheck':dict(SECURITY_STATUS),'isitbundled':dict(BUNDLE_STATUS),'storage':{'railway_volume_detected':persistent,'db_path':str(DB),'message':'Volume detected; verify memory survives a restart.' if persistent else 'Persistent Railway volume not detected; learning may reset on deployment.'},'paper_mode':settings.paper_mode,'live_execution_enabled':False}
 @app.get('/api/connections')
 async def connections():return connection_summary()
 @app.post('/api/connections/check')

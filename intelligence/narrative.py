@@ -7,6 +7,7 @@ from intelligence.market_regime import market_features
 from database.store import store
 from intelligence.activity import context as activity_context
 from data.web_research import cached as web_context,safe_url
+from data.bundle_research import cached as bundle_context, features as bundle_features
 
 
 def record_transaction(item,address):
@@ -54,8 +55,13 @@ def context(mint,token=None):
     clusters=[{'slot':slot,'wallets':sorted(wallets)} for slot,wallets in slots.items() if len(wallets)>=3]
     provider_flags=[r for r in security.get('risks',[]) if any(word in (r.get('name','')+' '+r.get('description','')).lower() for word in ('bundle','insider','linked wallet'))]
     if (security.get('graph_insiders_detected') or 0)>0:provider_flags.append({'name':'Provider insider graph indicator','description':'RugCheck reports potential insider links; identity and coordination remain unverified.'})
+    launch_bundle=bundle_context(mint)
+    if launch_bundle.get('status') in {'bundled','proxima','sumo','proxima_after_launch'}:
+        provider_flags.append({'name':'Is It Bundled? launch finding','description':'Provider reports '+launch_bundle['status']+'; bundled supply '+str(launch_bundle.get('bundledPct'))+'%. Not proof of fraud or fake engagement.','source':'Is It Bundled?','report':launch_bundle['report']})
     bundle={'status':'indicators_found' if clusters or provider_flags else 'not_detected_in_sample' if events or security.get('status')=='ok' else 'unknown','same_slot_buyer_groups':clusters[:10],'provider_flags':provider_flags,'scope':'Partial wallet history and provider flags; coordinated timing is not proof of a Jito bundle or common ownership.'}
     features={'security_status':security.get('status','pending'),'identity_status':','.join(sorted({c.get('identity','unknown') for c in reviews})) or 'unknown','endorsement_status':','.join(sorted({c.get('endorsement','unknown') for c in reviews})) or 'unknown','narrative':'speculative' if speculative else 'reviewed_confirmed' if reviews else 'unknown','acquisition':'transfer_and_buy' if received and bought else 'received_transfer' if received else 'buy' if bought else 'unknown','large_received_transfer':large,'bundle_indicator':bool(clusters or provider_flags),'rug_danger':bool(security.get('danger'))}
+    bundle['launch_report']=launch_bundle
+    features.update(bundle_features(launch_bundle))
     if token is None:
         observations=store.watch_history(mint=mint,limit=1)
         token=observations[0]['token'] if observations else None

@@ -43,9 +43,9 @@ def evidence(book,p,t):
            'memory_scope':'Bounded observed outcomes and evidence condition each decision; no model-weight training. Partial fills share their parent trade.'}
     # Keep market facts and outcome memory; bound verbose source text.
     if len(json.dumps(state,default=str).encode())>11000:
-        state['research']={k:research.get(k) for k in ('security','features','narrative_rotation','exit_learning','activity')}
+        state['research']={k:research.get(k) for k in ('security','bundle','features','narrative_rotation','exit_learning','activity')}
     if len(json.dumps(state,default=str).encode())>11000:
-        state['research']={'features':research.get('features'),'exit_learning':research.get('exit_learning'),'narrative_rotation':research.get('narrative_rotation')}
+        state['research']={'features':research.get('features'),'bundle':{'launch_report':(research.get('bundle') or {}).get('launch_report')},'exit_learning':research.get('exit_learning'),'narrative_rotation':research.get('narrative_rotation')}
     return state
 
 async def decide(book,p,t):
