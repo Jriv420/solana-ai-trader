@@ -124,7 +124,12 @@ class Store:
         return [self.row(r) for r in rows]
     def all(self):
         with self.conn() as c:rows=c.execute(f"SELECT * FROM {self.trade_table} ORDER BY entry_time DESC LIMIT 200").fetchall()
-        return [self.row(r) for r in rows]
+        result=[self.row(r) for r in rows];previous={}
+        for row in sorted(result,key=lambda x:(x['entry_time'],x['id'])):
+            if row['partial_exit']:continue
+            if row['mint'] in previous:row['previous_entry']=previous[row['mint']]
+            previous[row['mint']]={k:row.get(k) for k in ('id','entry_time','entry_market_cap_usd','entry_cap_is_fdv')}
+        return result
     def mark_peak(self,i,price):
         with self.conn() as c:c.execute(f'UPDATE {self.trade_table} SET peak_price_usd=MAX(COALESCE(peak_price_usd,entry_price_usd),?) WHERE id=? AND status="open"',(price,i))
     def daily_realized(self,now=None):

@@ -5,6 +5,23 @@ import database.store as db
 from database.store import Store
 from intelligence import exit_learning as review
 class ExitReview(unittest.TestCase):
+    def test_reentry_is_separate_and_partial_sales_keep_original_cap(self):
+        with tempfile.TemporaryDirectory() as tmp,patch.object(db,'DB',Path(tmp)/'db'):
+            a=Store('shadow_trades');now=time.time()
+            first=a.create_trade({'mint':review.DOPE,'entry_price_usd':1,'amount_sol':.1,'entry_time':now-300,'market_cap_usd':114000})
+            p=a.open()[0]
+            a.partial_close(p,2,now-250,100,.05,'AI exit',.5,228000,False)
+            a.close_trade(first['id'],2,now-200,100,.05,'AI exit',228000)
+            second=a.create_trade({'mint':review.DOPE,'entry_price_usd':2,'amount_sol':.05,'entry_time':now-100,'market_cap_usd':207300})
+            rows=a.all();later=next(x for x in rows if x['id']==second['id'])
+            self.assertEqual(later['previous_entry']['entry_market_cap_usd'],114000)
+            self.assertEqual(later['entry_market_cap_usd'],207300)
+            self.assertTrue(all(x['entry_market_cap_usd']==114000 for x in rows if x['id']!=second['id']))
+            seq=review.trade_sequence(review.DOPE,now)
+            self.assertEqual(len(seq),2);self.assertEqual(seq[0]['trade_id'],second['id'])
+            self.assertEqual(seq[1]['entry_market_cap_usd'],114000)
+            self.assertEqual(seq[1]['final_fill_pnl_sol'],.05)
+            self.assertIn('Earlier entry cap is user reported',review.context(review.DOPE)['reviewed_trade_case']['scope'])
     def test_samples_and_accounts_do_not_rewrite_pnl(self):
         with tempfile.TemporaryDirectory() as tmp,patch.object(db,'DB',Path(tmp)/'db'):
             a=Store();b=Store('shadow_trades');now=time.time()
