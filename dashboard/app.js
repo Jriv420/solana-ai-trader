@@ -1,5 +1,7 @@
 const openDetails = new Set(), walletDetails = new Map(), walletLoading = new Set();
 let currentPage = 'new';
+let paperAccount='aggressive';
+try {const saved=localStorage.getItem('nexus-paper-account');if(['original','aggressive'].includes(saved))paperAccount=saved;} catch {}
 let researchMint=null, researchData=null;
 let connectionData={};
 let searchQuery = '';
@@ -34,9 +36,9 @@ async function refreshDashboard() {
       getData('/api/trades'),getData('/api/new-pairs'), getData('/api/trending?window='+windowSize), getData('/api/watch-history'),getData('/api/wallets'),getData('/api/connections')]);
     [status,opportunities,trades,launches,trending,watched,walletRegistry,connectionData] = results;
     refreshError = '';
-    document.getElementById('balance').textContent = Number(status.balance_sol).toFixed(3)+' SOL';
+    updateAccountSummary();
     document.getElementById('mode').textContent = status.paper_mode ? 'PAPER':'LIVE';
-    document.getElementById('positions').textContent = (status.open_positions || []).length;
+
     if(researchMint && currentPage==='research') researchData=await getData('/api/research/'+encodeURIComponent(researchMint));
     if (selectedMint) details = await getData('/api/watch-history?mint='+encodeURIComponent(selectedMint));
   } catch (error) { refreshError='Update failed ('+error.message+'). Displayed data may be stale.'; }
@@ -123,15 +125,36 @@ function walletRegistryView() {
     return `<article class="card wallet-profile"><div class="coin-bottom"><strong>${escapeHtml(w.label)}</strong><span class="status-chip">${label}</span></div><p class="mint">${escapeHtml(w.address)}</p><p class="muted">${escapeHtml((w.tags || []).join(' · '))}</p><div class="metrics"><div><small>Observed PnL (SOL)</small><strong>${p.estimated_pnl_sol == null ? '—':Number(p.estimated_pnl_sol).toFixed(3)}</strong></div><div><small>Win rate</small><strong>${p.win_rate_pct == null ? '—':p.win_rate_pct+'%'}</strong></div><div><small>Largest current position</small><strong>${compactMoney(w.largest_position_usd)}</strong></div></div><p class="muted">${Number(p.matched_sells || 0)} matched sells · ${Number(p.distinct_tokens || 0)} tokens · Reputation ${Number(p.score || 0)}/100${p.data_status && p.data_status!=='ok' ? ' · '+escapeHtml(p.data_status):''}</p><p class="muted">Observed portfolio: ${compactMoney(w.observed_portfolio_usd)} (recently scanned coins only)<br>Last evaluated: ${stamp(w.evaluated_at)}</p>${w.disabled ? '<p class="muted">Add this address above to resume manual tracking.</p>':`<button data-remove-wallet="${escapeHtml(w.address)}">Stop tracking</button>`}</article>`;
   }).join(''):'<div class="empty">Wallets will appear as holders are discovered. You can add one above.</div>');
 }
+function selectedAccount() {
+  return paperAccount==='aggressive' ? {label:'Aggressive momentum',balance:status.shadow?.balance_sol,positions:status.shadow?.positions || [],trades:status.shadow?.trades || [],metrics:status.shadow?.metrics || {}} : {label:'Original AI strategy',balance:status.balance_sol,positions:status.open_positions || [],trades,metrics:status.paper_metrics || {}};
+}
+function updateAccountSummary() {
+  const a=selectedAccount();document.getElementById('paper-account').value=paperAccount;
+  document.getElementById('balance-label').textContent=a.label+' · available';
+  document.getElementById('balance').textContent=a.balance == null ? '— SOL':Number(a.balance).toFixed(4)+' SOL';
+  document.getElementById('positions').textContent=a.positions.length;
+}
+function tradeCards(rows,positions=false) {
+  const a=selectedAccount(),m=a.metrics;
+  const heading=`<div class="card"><h2>${positions ? 'Positions':'Trade History'} · ${escapeHtml(a.label)}</h2><p>Realized net PnL: ${Number(m.net_pnl_sol || 0).toFixed(4)} SOL · ${Number(m.closed_trades || 0)} closed · ${a.positions.length} open</p><p class="muted">Balance is available simulated cash after open buys. Realized PnL excludes open-position gains/losses.${paperAccount==='aggressive' && !positions ? ' Showing the latest 20 trades.':''}</p></div>`;
+  return heading+(rows.length ? rows.map(t=>`<article class="card"><div class="coin-title"><h3>$${escapeHtml(t.symbol || '?')}</h3><button class="copy-ca" data-copy-ca="${escapeHtml(t.mint)}">Copy CA</button></div><p>${escapeHtml(t.status)} · ${Number(t.amount_sol).toFixed(4)} SOL · Bought ${stamp(t.entry_time)}${t.exit_time ? '<br>Closed '+stamp(t.exit_time):''}</p><p class="${Number(t.pnl_sol)>=0 ? 'positive':'negative'}">${t.pnl_sol == null ? 'Open · realized PnL pending':Number(t.pnl_sol).toFixed(4)+' SOL · '+Number(t.pnl_pct).toFixed(1)+'%'}</p>${t.exit_reason ? '<p>Exit: '+escapeHtml(t.exit_reason)+'</p>':''}<p class="mint">${escapeHtml(t.mint)}</p></article>`).join(''):'<div class="empty">'+(positions ? 'No open positions in this account.':'No trades in this account yet.')+'</div>');
+}
+document.getElementById('paper-account').addEventListener('change',event=>{
+ paperAccount=event.target.value==='original' ? 'original':'aggressive';
+ try {localStorage.setItem('nexus-paper-account',paperAccount);} catch {}
+ updateAccountSummary();render();
+});
 function render() {
   document.getElementById('wallet-manager').hidden=currentPage!=='wallets';
   document.getElementById('research-manager').hidden=currentPage!=='research';
   document.querySelectorAll('nav button').forEach(b => { const active=b.dataset.v===currentPage; b.classList.toggle('active',active); b.setAttribute('aria-pressed',String(active)); });
   let html = refreshError ? `<p role="status">${escapeHtml(refreshError)}</p>`:'';
-  const trial=status.risk_trial;
+  updateAccountSummary();
+  const trial=paperAccount==='original' ? status.risk_trial:null;
+  if(paperAccount==='aggressive' && ['positions','history','agents','scan'].includes(currentPage))html+=`<div class="card"><h2>Aggressive momentum paper account</h2><p>${status.shadow?.active ? 'Running':'Entry window ended'} · Entries end ${stamp(status.shadow?.ends_at)} · Open positions continue normal exits.</p></div>`;
   if(trial?.active) html+=`<div class="card"><h2>Riskier paper trial</h2><p>Ends ${stamp(trial.ends_at)} · automatic return to normal rules</p><p>Liquidity ≥ ${money(trial.min_liquidity_usd)} · score ≥ ${Number(trial.min_combined_score)} · wallet ≥ ${Number(trial.min_wallet_score)}<br>Buy cap ${Number(trial.max_trade_sol)} SOL · ${Number(trial.max_open_positions)} positions · daily realized loss limit ${Number(trial.max_daily_loss_sol)} SOL</p></div>`;
-  const scan=status.scan;
-  if(scan && ['positions','history','agents','scan'].includes(currentPage)) html+=`<div class="card"><h2>Paper scanner</h2><p>Last completed: ${stamp(scan.finished_at)} · ${Number(scan.evaluated)} coins evaluated · ${Number(scan.evaluation_failures)} errors · ${Number(scan.paper_buys)} buys this scan</p><p>${Object.entries(scan.blockers || {}).map(([reason,count])=>`${Number(count)}: ${escapeHtml(reason)}`).join('<br>') || 'No rejection reasons in this scan.'}</p></div>`;
+  const scan=paperAccount==='aggressive' ? (status.shadow?.checked_at ? {...status.scan,...status.shadow,finished_at:status.shadow.checked_at}:null):status.scan;
+  if(scan && ['positions','history','agents','scan'].includes(currentPage)) html+=`<div class="card"><h2>${escapeHtml(selectedAccount().label)} scanner</h2><p>Last completed: ${stamp(scan.finished_at)} · ${Number(scan.evaluated)} coins evaluated · ${Number(scan.evaluation_failures)} errors · ${Number(scan.paper_buys)} buys this scan</p><p>${Object.entries(scan.blockers || {}).map(([reason,count])=>`${Number(count)}: ${escapeHtml(reason)}`).join('<br>') || 'No rejection reasons in this scan.'}</p></div>`;
   if(['agents','watch'].includes(currentPage)) {const review=status.missed_learning || {};html+=`<div class="card"><h2>Missed opportunity learning</h2><p>${escapeHtml(review.scope || 'Collecting rejection decisions and future prices.')}</p>${(review.by_reason || []).map(x=>`<p>${escapeHtml(x.reason)} · ${Number(x.distinct_coins)} coins · ${Number(x.surged_50_pct)}% rose 50% · ${Number(x.fell_30_pct)}% fell 30% · median latest ${Number(x.median_latest_change_pct)}%</p>`).join('') || '<p>Waiting for at least five minutes of follow-up prices.</p>'}${(review.surges || []).map(x=>`<p class="mint">${escapeHtml(x.mint)} · observed peak +${Number(x.peak_gain_pct)}% · latest ${Number(x.latest_change_pct)}%</p>`).join('')}</div>`;}
   if (status.error) html+=`<p role="status">Scanner error: ${escapeHtml(status.error)}</p>`;
   if (currentPage==='scan') html += feedHeader('Opportunities','Latest scan batch · Scores reflect bot signals.',sortControl())+cards(opportunities,'Waiting for a scan.');
@@ -141,12 +164,12 @@ function render() {
     html += feedHeader('Watch History','Every discovery, check and filter decision.');
     if (selectedMint) html += `<div class="card"><button id="back-watch">All watched coins</button><h3 class="mint">${escapeHtml(selectedMint)}</h3><p class="muted">Latest checks first</p></div>`+cards(details,'No scored checks yet; this launch is awaiting indexed market data.');
     else html += cards(watched,'No coins checked yet.',true);
-  } else if (currentPage==='positions') html += `<div class="card"><h2>Open Positions</h2><pre>${escapeHtml(JSON.stringify(status.open_positions || [],null,2))}</pre></div>`;
+  } else if (currentPage==='positions') html += tradeCards(selectedAccount().positions,true);
   else if (currentPage==='agents') html += connectionsView();
   else if (currentPage==='routes') html += '<div class="card"><h2>Execution Routes</h2><p>Pump Direct → PumpSwap → Jupiter fallback</p><p class="muted">Live trading is not enabled.</p></div>';
   else if (currentPage==='wallets') html += walletRegistryView();
   else if (currentPage==='research') html += researchView();
-  else if (currentPage==='history') html += `<div class="card"><h2>Trade History</h2><pre>${escapeHtml(JSON.stringify(trades,null,2))}</pre></div>`;
+  else if (currentPage==='history') html += tradeCards(selectedAccount().trades);
   document.getElementById('content').innerHTML = html;
 }
 document.querySelectorAll('nav button').forEach(button => button.addEventListener('click',()=>{currentPage=button.dataset.v;selectedMint=null;tokenSort='default';render();}));
