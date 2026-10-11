@@ -104,6 +104,8 @@ async def scan_tokens():
         selected += [recent[(_new_cursor + i) % len(recent)] for i in range(min(10, len(recent)))]
         _new_cursor += 10
     # Revisit watched coins and positions as well as fresh discoveries.
+    from intelligence.exit_learning import mints as exit_mints
+    selected += exit_mints()
     selected += store.watched_mints(limit=10, offset=_cursor)
     from database.missed import missed
     selected += missed.mints()

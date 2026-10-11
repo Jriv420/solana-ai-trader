@@ -105,6 +105,8 @@ async def loop():
             for observation in results:
                 if isinstance(observation,Exception):continue
                 store.record_observation(observation)
+                from intelligence.exit_learning import observe as observe_exit
+                observe_exit(observation['token'])
                 observations.append(observation)
             STATE["shadow"]=shadow_step(observations)
             logging.getLogger('uvicorn.error').info('NEXUS shadow paper summary %s',STATE["shadow"])

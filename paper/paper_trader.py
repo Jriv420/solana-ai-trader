@@ -30,6 +30,9 @@ class PaperTrader:
             execution=price;proceeds=a*price/entry
         sol=proceeds-a;pct=100*sol/a
         closed=self.store.close_trade(int(p['id']),execution,time.time(),pct,sol,reason,t.get('market_cap_usd'),t.get('market_cap_is_fdv',False))
+        if closed:
+            from intelligence.exit_learning import start
+            start(self.store.trade_table,int(p['id']),t)
         if closed:logging.getLogger('uvicorn.error').info('NEXUS paper exit book=%s symbol=%s mint=%s pnl_sol=%.6f reason=%s',self.store.trade_table,p.get('symbol'),p['mint'],sol,reason)
         return closed
 paper_trader=PaperTrader()
