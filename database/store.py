@@ -1,8 +1,14 @@
-import json,sqlite3,time,os
+import json,sqlite3,time,os,math
 from datetime import datetime,timezone
 from pathlib import Path
 DEFAULT_DB=Path(__file__).resolve().parent/"trades.sqlite3"
 DB=Path(os.getenv("DB_PATH") or (str(Path(os.environ["RAILWAY_VOLUME_MOUNT_PATH"])/"trades.sqlite3") if os.getenv("RAILWAY_VOLUME_MOUNT_PATH") else str(DEFAULT_DB)))
+def valid_cap(value):
+    try:
+        n=float(value)
+        return n if math.isfinite(n) and n>0 else None
+    except (TypeError,ValueError):return None
+
 class Store:
     def __init__(self,trade_table="trades"):
         if trade_table not in {"trades","shadow_trades"}:raise ValueError("Invalid trade table")
@@ -10,6 +16,10 @@ class Store:
         with self.conn() as c:c.execute(f'CREATE TABLE IF NOT EXISTS {self.trade_table}(id INTEGER PRIMARY KEY AUTOINCREMENT,mint TEXT,symbol TEXT,entry_price_usd REAL,exit_price_usd REAL,amount_sol REAL,entry_time REAL,exit_time REAL,status TEXT,pnl_pct REAL,pnl_sol REAL,exit_reason TEXT,context_json TEXT)')
         with self.conn() as c:
             if 'peak_price_usd' not in {r['name'] for r in c.execute(f'PRAGMA table_info({self.trade_table})')}:c.execute(f'ALTER TABLE {self.trade_table} ADD COLUMN peak_price_usd REAL')
+        with self.conn() as c:
+            columns={r['name'] for r in c.execute(f'PRAGMA table_info({self.trade_table})')}
+            for field,kind in (('entry_market_cap_usd','REAL'),('exit_market_cap_usd','REAL'),('entry_cap_is_fdv','INTEGER'),('exit_cap_is_fdv','INTEGER')):
+                if field not in columns:c.execute(f'ALTER TABLE {self.trade_table} ADD COLUMN {field} {kind}')
     def conn(self):
         DB.parent.mkdir(parents=True,exist_ok=True)
         c=sqlite3.connect(DB,timeout=15);c.row_factory=sqlite3.Row;return c
@@ -30,14 +40,20 @@ class Store:
             c.execute('DELETE FROM ai_requests WHERE day<?',(day[:4]+'-01-01',))
         return True
     def row(self,r):
-        x=dict(r);raw=x.pop("context_json",None);x["context"]=json.loads(raw) if raw else {};return x
+        x=dict(r);raw=x.pop("context_json",None);x["context"]=json.loads(raw) if raw else {}
+        if x.get('entry_market_cap_usd') is None:
+            # Old entry snapshots are historical evidence; never use today's cap.
+            t=x['context'].get('entry_evidence') or x['context'].get('token') or {}
+            cap=valid_cap(t.get('market_cap_usd'))
+            if cap is not None:x.update(entry_market_cap_usd=cap,entry_cap_is_fdv=bool(t.get('market_cap_is_fdv')))
+        return x
     def create_trade(self,t):
         with self.conn() as c:
-            cur=c.execute(f'INSERT INTO {self.trade_table}(mint,symbol,entry_price_usd,amount_sol,entry_time,status,context_json) VALUES(?,?,?,?,?,"open",?)',(t["mint"],t.get("symbol"),t["entry_price_usd"],t["amount_sol"],t["entry_time"],json.dumps(t.get("context",{}))));t["id"]=cur.lastrowid
+            cur=c.execute(f'INSERT INTO {self.trade_table}(mint,symbol,entry_price_usd,amount_sol,entry_time,status,context_json,entry_market_cap_usd,entry_cap_is_fdv) VALUES(?,?,?,?,?,"open",?,?,?)',(t["mint"],t.get("symbol"),t["entry_price_usd"],t["amount_sol"],t["entry_time"],json.dumps(t.get("context",{})),valid_cap(t.get("market_cap_usd")),int(bool(t.get("market_cap_is_fdv")))));t["id"]=cur.lastrowid
         return t
-    def close_trade(self,i,price,tm,pct,sol,reason):
+    def close_trade(self,i,price,tm,pct,sol,reason,market_cap_usd=None,cap_is_fdv=False):
         with self.conn() as c:
-            result=c.execute(f"UPDATE {self.trade_table} SET exit_price_usd=?,exit_time=?,status='closed',pnl_pct=?,pnl_sol=?,exit_reason=? WHERE id=? AND status='open'",(price,tm,pct,sol,reason,i))
+            result=c.execute(f"UPDATE {self.trade_table} SET exit_price_usd=?,exit_time=?,status='closed',pnl_pct=?,pnl_sol=?,exit_reason=?,exit_market_cap_usd=?,exit_cap_is_fdv=? WHERE id=? AND status='open'",(price,tm,pct,sol,reason,valid_cap(market_cap_usd),int(bool(cap_is_fdv)),i))
             return bool(result.rowcount)
     def open(self):
         with self.conn() as c:rows=c.execute(f"SELECT * FROM {self.trade_table} WHERE status='open'").fetchall()

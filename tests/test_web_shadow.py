@@ -48,6 +48,22 @@ class NewFeatures(unittest.IsolatedAsyncioTestCase):
             self.assertEqual((await web.search('11111111111111111111111111111111'))['request_status'],'provider_quota_or_auth_paused')
             self.assertEqual(web.usage()['requests_today'],1)
     def token(self):return {'mint':MINT,'symbol':'TEST','price_usd':1,'sol_price_usd':100,'timestamp':time.time(),'liquidity_usd':10000,'volume_5m_usd':5000,'price_change_5m_pct':10,'buys_5m':20,'sells_5m':10,'research':{'security':{'status':'ok','danger':False},'bundle':{'status':'indicators_found'}}}
+    def test_entry_and_exit_market_caps_are_saved_snapshots(self):
+        book=Store('shadow_trades');trader=PaperTrader(book)
+        t=dict(self.token(),market_cap_usd=277000,market_cap_is_fdv=True)
+        trader.buy(t,.05,{})
+        p=book.open()[0]
+        self.assertEqual(p['entry_market_cap_usd'],277000);self.assertTrue(p['entry_cap_is_fdv'])
+        trader.sell(p,dict(t,market_cap_usd=500000,market_cap_is_fdv=False),'test')
+        closed=book.all()[0]
+        self.assertEqual(closed['entry_market_cap_usd'],277000);self.assertEqual(closed['exit_market_cap_usd'],500000)
+        self.assertFalse(closed['exit_cap_is_fdv'])
+        legacy=book.create_trade({'mint':MINT,'symbol':'OLD','entry_price_usd':1,'amount_sol':.05,'entry_time':100,'context':{'entry_evidence':{'market_cap_usd':10000,'market_cap_is_fdv':False}}})
+        old=next(x for x in book.open() if x['id']==legacy['id'])
+        self.assertEqual(old['entry_market_cap_usd'],10000);self.assertIsNone(old['exit_market_cap_usd'])
+        missing=book.create_trade({'mint':MINT,'symbol':'UNKNOWN','entry_price_usd':1,'amount_sol':.05,'entry_time':100,'context':{}})
+        self.assertIsNone(next(x for x in book.open() if x['id']==missing['id'])['entry_market_cap_usd'])
+
     def test_requested_risk_exit_fresh_price_and_no_reentry(self):
         from strategy.exit import should_exit
         t=dict(self.token(),symbol='QT')
