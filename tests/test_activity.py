@@ -11,6 +11,17 @@ from intelligence.risk_ai import score_contextual_risk
 import app
 MINT='So11111111111111111111111111111111111111112'
 class ActivityTests(unittest.TestCase):
+    def test_collapse_feedback_persists_once_and_is_supplied_as_unverified_example(self):
+        activity.ensure();activity.ensure()
+        with db.store.conn() as c:
+            self.assertEqual(c.execute('SELECT COUNT(*) n FROM activity_labels WHERE mint=?',(activity.SUPMKT,)).fetchone()['n'],1)
+        self.assertEqual(activity.latest(activity.SUPMKT)['volume'],'suspected')
+        c=activity.context(MINT,{}, {}, {})
+        self.assertEqual(c['volume_class'],'unknown')
+        self.assertEqual(c['reviewed_examples'][0]['mint'],activity.SUPMKT)
+        self.assertIn('does not establish zero buyers',c['reviewed_examples'][0]['limitations'])
+        activity.save(activity.SUPMKT,{'volume':'unknown','engagement':'unknown','note':'New review'})
+        activity.ensure();self.assertEqual(activity.latest(activity.SUPMKT)['note'],'New review')
     def setUp(self):
         self.temp=tempfile.TemporaryDirectory();self.db=patch.object(db,'DB',Path(self.temp.name)/'db.sqlite');self.db.start()
         Store().ensure_observations();research.ensure();activity._cache.clear()

@@ -71,6 +71,16 @@ class Settings:
     max_risk_score: float=_f("MAX_RISK_SCORE",70)
 settings=Settings()
 
+def daily_loss_limit_enabled(base=None):
+    # The testing override can never disable a real-money limit.
+    base=base or settings
+    return not base.paper_mode or _b('PAPER_DAILY_LOSS_LIMIT_ENABLED',True)
+
+def paper_test_until():
+    import math
+    value=_f('PAPER_TEST_UNTIL',0)
+    return value if settings.paper_mode and math.isfinite(value) and value>0 else 0
+
 
 def trading_settings(base=None,now=None):
     """A fixed-deadline paper trial, evaluated on every decision, survives restarts."""
@@ -94,4 +104,4 @@ def risk_trial_status(now=None):
     return {'active':rules is not settings,'ends_at':until if until>0 else None,
         'min_liquidity_usd':rules.min_liquidity_usd,'min_combined_score':rules.min_combined_score,
         'min_wallet_score':rules.min_wallet_score,'max_trade_sol':rules.max_trade_sol,
-        'max_open_positions':rules.max_open_positions,'max_daily_loss_sol':rules.max_daily_loss_sol}
+        'max_open_positions':rules.max_open_positions,'max_daily_loss_sol':rules.max_daily_loss_sol,'daily_loss_limit_enabled':daily_loss_limit_enabled()}
