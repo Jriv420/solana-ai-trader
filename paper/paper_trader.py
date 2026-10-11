@@ -1,4 +1,5 @@
-import math,time
+import math,time,logging
+from paper.user_exit import exit_requested
 from config.settings import settings
 from database.store import store
 
@@ -7,6 +8,7 @@ class PaperTrader:
     def open_positions(self):return self.store.open()
     def balance_sol(self):return settings.paper_starting_sol+self.store.realized()-sum(float(p["amount_sol"]) for p in self.open_positions())
     def buy(self,t,a,c):
+        if exit_requested(t):return None
         price=float(t.get('price_usd') or 0);sol_usd=float(t.get('sol_price_usd') or 0)
         if not 0<=time.time()-float(t.get('timestamp') or 0)<=120:return None
         if not all(math.isfinite(x) and x>0 for x in (price,sol_usd,a)) or a>self.balance_sol():return None
@@ -27,5 +29,7 @@ class PaperTrader:
             # Preserve legacy positions without inventing historical cost or SOL prices.
             execution=price;proceeds=a*price/entry
         sol=proceeds-a;pct=100*sol/a
-        return self.store.close_trade(int(p['id']),execution,time.time(),pct,sol,reason)
+        closed=self.store.close_trade(int(p['id']),execution,time.time(),pct,sol,reason)
+        if closed:logging.getLogger('uvicorn.error').info('NEXUS paper exit book=%s symbol=%s mint=%s pnl_sol=%.6f reason=%s',self.store.trade_table,p.get('symbol'),p['mint'],sol,reason)
+        return closed
 paper_trader=PaperTrader()

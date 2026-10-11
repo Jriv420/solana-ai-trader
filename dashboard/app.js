@@ -28,13 +28,24 @@ function age(value) {
   const mins = Math.max(0,Math.floor(value));
   return mins < 60 ? mins+'m' : mins < 1440 ? Math.floor(mins/60)+'h' : Math.floor(mins/1440)+'d';
 }
+let accountRequest=0;
+async function refreshAccountSummary() {
+  const request=++accountRequest;
+  try {
+    const next=await getData('/api/status');
+    if(request!==accountRequest)return;
+    status=next;updateAccountSummary();render();
+  } catch(error) {if(request===accountRequest){refreshError='Balance update failed; displayed balances may be stale.';render();}}
+}
 async function refreshDashboard() {
   if (loading) return;
   loading = true;
   try {
-    const results = await Promise.all([getData('/api/status'), getData('/api/opportunities'),
+    const accountUpdate=refreshAccountSummary();
+    const results = await Promise.all([getData('/api/opportunities'),
       getData('/api/trades'),getData('/api/new-pairs'), getData('/api/trending?window='+windowSize), getData('/api/watch-history'),getData('/api/wallets'),getData('/api/connections')]);
-    [status,opportunities,trades,launches,trending,watched,walletRegistry,connectionData] = results;
+    [opportunities,trades,launches,trending,watched,walletRegistry,connectionData] = results;
+    await accountUpdate;
     refreshError = '';
     updateAccountSummary();
     document.getElementById('mode').textContent = status.paper_mode ? 'PAPER':'LIVE';
@@ -142,7 +153,7 @@ function tradeCards(rows,positions=false) {
 document.getElementById('paper-account').addEventListener('change',event=>{
  paperAccount=event.target.value==='original' ? 'original':'aggressive';
  try {localStorage.setItem('nexus-paper-account',paperAccount);} catch {}
- updateAccountSummary();render();
+ updateAccountSummary();render();refreshAccountSummary();
 });
 function render() {
   document.getElementById('wallet-manager').hidden=currentPage!=='wallets';

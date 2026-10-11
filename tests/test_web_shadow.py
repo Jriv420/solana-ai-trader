@@ -48,6 +48,22 @@ class NewFeatures(unittest.IsolatedAsyncioTestCase):
             self.assertEqual((await web.search('11111111111111111111111111111111'))['request_status'],'provider_quota_or_auth_paused')
             self.assertEqual(web.usage()['requests_today'],1)
     def token(self):return {'mint':MINT,'symbol':'TEST','price_usd':1,'sol_price_usd':100,'timestamp':time.time(),'liquidity_usd':10000,'volume_5m_usd':5000,'price_change_5m_pct':10,'buys_5m':20,'sells_5m':10,'research':{'security':{'status':'ok','danger':False},'bundle':{'status':'indicators_found'}}}
+    def test_requested_risk_exit_fresh_price_and_no_reentry(self):
+        from strategy.exit import should_exit
+        t=dict(self.token(),symbol='QT')
+        shadow.TRADER.buy(t,.025,{})
+        p=shadow.BOOK.open()[0]
+        with patch.dict('os.environ',{'PAPER_EXIT_SYMBOLS':'QT'}):
+            self.assertFalse(should_exit(p,dict(t,timestamp=time.time()-130))['exit'])
+            self.assertTrue(should_exit(p,t)['exit'])
+            shadow.step([{'token':t}])
+            self.assertEqual(shadow.BOOK.open(),[])
+            self.assertIn('User-requested risk exit',shadow.BOOK.all()[0]['exit_reason'])
+            self.assertIsNone(shadow.TRADER.buy(t,.025,{}))
+            self.assertIsNone(PaperTrader(self.primary).buy(t,.025,{}))
+            self.assertGreater(shadow.TRADER.balance_sol(),settings.paper_starting_sol-.025)
+            self.assertEqual(self.primary.all(),[])
+
     def test_shadow_isolated_and_same_fill_costs(self):
         t=self.token()
         with patch.object(shadow,'settings',replace(settings,paper_mode=True)):
