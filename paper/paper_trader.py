@@ -20,6 +20,12 @@ class PaperTrader:
         context=dict(c,paper_fill=fill,paper_narrative_scaleout=policy)
         return self.store.create_trade({"mint":t["mint"],"symbol":t.get("symbol"),"entry_price_usd":execution,"amount_sol":a,"entry_time":time.time(),"context":context,"market_cap_usd":t.get("market_cap_usd"),"market_cap_is_fdv":t.get("market_cap_is_fdv",False)})
     def sell(self,p,t,reason,fraction=1):
+        # A protective task may have closed/reduced this position while AI awaited.
+        # This synchronous reload and write have no async interleaving point.
+        current=next((x for x in self.store.open() if x['id']==p['id']),None)
+        if current is None:return False
+        if current['amount_sol']!=p['amount_sol']:return False
+        p=current
         if not isinstance(fraction,(int,float)) or not math.isfinite(fraction) or not 0<fraction<=1:return False
         if fraction<1 and not settings.paper_mode:return False
         price=float(t.get('price_usd') or 0);sol_usd=float(t.get('sol_price_usd') or 0)

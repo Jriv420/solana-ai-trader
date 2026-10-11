@@ -46,6 +46,7 @@ class Store:
             t=x['context'].get('entry_evidence') or x['context'].get('token') or {}
             cap=valid_cap(t.get('market_cap_usd'))
             if cap is not None:x.update(entry_market_cap_usd=cap,entry_cap_is_fdv=bool(t.get('market_cap_is_fdv')))
+        x['risk_samples']=x['context'].get('risk_samples',[])
         x['exit_decision']=x['context'].get('exit_decision')
         x['partial_exit']=x['context'].get('partial_exit')
         x['paper_narrative_scaleout']=bool(x['context'].get('paper_narrative_scaleout'))
@@ -84,6 +85,18 @@ class Store:
             cur=c.execute(f'INSERT INTO {self.trade_table}({",".join(keys)}) VALUES({",".join("?" for _ in keys)})',tuple(closed[k] for k in keys))
             c.execute(f'UPDATE {self.trade_table} SET amount_sol=?,context_json=? WHERE id=?',(r['amount_sol']*(1-fraction),json.dumps(remaining_context),p['id']))
             return cur.lastrowid
+    def record_risk_sample(self,i,t):
+        price=valid_cap(t.get('price_usd'));stamp=valid_cap(t.get('timestamp'))
+        if price is None or stamp is None or not 0<=time.time()-stamp<=120:return
+        with self.conn() as c:
+            c.execute('BEGIN IMMEDIATE')
+            r=c.execute(f'SELECT context_json FROM {self.trade_table} WHERE id=? AND status="open"',(i,)).fetchone()
+            if not r:return
+            context=json.loads(r['context_json'] or '{}');samples=context.get('risk_samples',[])
+            if samples and samples[-1]['timestamp']>=stamp:return
+            sample={k:t.get(k) for k in ('timestamp','price_usd','market_cap_usd','liquidity_usd','volume_5m_usd','buys_5m','sells_5m')}
+            context['risk_samples']=(samples+[sample])[-12:]
+            c.execute(f'UPDATE {self.trade_table} SET context_json=? WHERE id=?',(json.dumps(context),i))
     def save_exit_decision(self,i,decision):
         with self.conn() as c:
             c.execute('BEGIN IMMEDIATE')
