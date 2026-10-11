@@ -68,7 +68,9 @@ async def discover_tokens():
     global _discovery_cache, _discovery_images, _discovery_updated
     if time.time() - _discovery_updated < 60:
         return _discovery_cache
-    found = []
+    from data.narrative_trends import refresh as refresh_trends,mints as leader_mints
+    await refresh_trends()
+    found = leader_mints()
     images = {}
     async with httpx.AsyncClient(timeout=10) as client:
         for url in DISCOVERY_URLS:

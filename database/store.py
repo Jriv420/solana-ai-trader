@@ -46,6 +46,9 @@ class Store:
             t=x['context'].get('entry_evidence') or x['context'].get('token') or {}
             cap=valid_cap(t.get('market_cap_usd'))
             if cap is not None:x.update(entry_market_cap_usd=cap,entry_cap_is_fdv=bool(t.get('market_cap_is_fdv')))
+        x['partial_exit']=x['context'].get('partial_exit')
+        x['paper_narrative_scaleout']=bool(x['context'].get('paper_narrative_scaleout'))
+        x['paper_scale_out_done']=bool(x['context'].get('paper_scale_out_done'))
         from intelligence.exit_learning import RUNNER,FEEDBACK
         if x.get('mint')==RUNNER:x['user_exit_feedback']=FEEDBACK
         if x.get('status')=='closed':
@@ -60,6 +63,26 @@ class Store:
         with self.conn() as c:
             result=c.execute(f"UPDATE {self.trade_table} SET exit_price_usd=?,exit_time=?,status='closed',pnl_pct=?,pnl_sol=?,exit_reason=?,exit_market_cap_usd=?,exit_cap_is_fdv=? WHERE id=? AND status='open'",(price,tm,pct,sol,reason,valid_cap(market_cap_usd),int(bool(cap_is_fdv)),i))
             return bool(result.rowcount)
+    def partial_close(self,p,price,tm,pct,sol,reason,fraction,market_cap_usd,cap_is_fdv):
+        if not 0<fraction<1:return None
+        with self.conn() as c:
+            c.execute('BEGIN IMMEDIATE')
+            r=c.execute(f'SELECT * FROM {self.trade_table} WHERE id=? AND status="open"',(p['id'],)).fetchone()
+            if not r or r['amount_sol']!=p['amount_sol']:return None
+            context=json.loads(r['context_json'] or '{}')
+            if context.get('paper_scale_out_done'):return None
+            closed_context=dict(context,partial_exit={'parent_trade_id':p['id'],'fraction':fraction})
+            remaining_context=dict(context,paper_scale_out_done=True)
+            if context.get('paper_fill'):
+                for target,ratio in ((closed_context,fraction),(remaining_context,1-fraction)):
+                    target['paper_fill']=dict(context['paper_fill'])
+                    for key in ('quantity','entry_fee_sol'):target['paper_fill'][key]*=ratio
+            closed=dict(r);closed.pop('id')
+            closed.update(amount_sol=r['amount_sol']*fraction,exit_price_usd=price,exit_time=tm,status='closed',pnl_pct=pct,pnl_sol=sol,exit_reason=reason,context_json=json.dumps(closed_context),exit_market_cap_usd=valid_cap(market_cap_usd),exit_cap_is_fdv=int(bool(cap_is_fdv)))
+            keys=list(closed)
+            cur=c.execute(f'INSERT INTO {self.trade_table}({",".join(keys)}) VALUES({",".join("?" for _ in keys)})',tuple(closed[k] for k in keys))
+            c.execute(f'UPDATE {self.trade_table} SET amount_sol=?,context_json=? WHERE id=?',(r['amount_sol']*(1-fraction),json.dumps(remaining_context),p['id']))
+            return cur.lastrowid
     def open(self):
         with self.conn() as c:rows=c.execute(f"SELECT * FROM {self.trade_table} WHERE status='open'").fetchall()
         return [self.row(r) for r in rows]

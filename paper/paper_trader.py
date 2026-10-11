@@ -15,9 +15,13 @@ class PaperTrader:
         fee=max(0,min(settings.paper_fee_bps,5000))/10000;slip=max(0,min(settings.paper_slippage_bps,5000))/10000
         execution=price*(1+slip);notional=a/(1+fee)
         fill={'version':1,'entry_sol_price_usd':sol_usd,'quantity':notional*sol_usd/execution,'entry_fee_sol':a-notional,'fee_bps':fee*10000,'slippage_bps':slip*10000,'scope':'Estimated proportional fees/slippage; no execution guarantee.'}
-        context=dict(c,paper_fill=fill)
+        evidence=t.get('research') or {}
+        policy=bool((evidence.get('narrative_rotation') or {}).get('small_cap_rotation_candidate') or ((evidence.get('exit_learning') or {}).get('user_feedback') or {}).get('moonbag_candidate'))
+        context=dict(c,paper_fill=fill,paper_narrative_scaleout=policy)
         return self.store.create_trade({"mint":t["mint"],"symbol":t.get("symbol"),"entry_price_usd":execution,"amount_sol":a,"entry_time":time.time(),"context":context,"market_cap_usd":t.get("market_cap_usd"),"market_cap_is_fdv":t.get("market_cap_is_fdv",False)})
-    def sell(self,p,t,reason):
+    def sell(self,p,t,reason,fraction=1):
+        if not isinstance(fraction,(int,float)) or not math.isfinite(fraction) or not 0<fraction<=1:return False
+        if fraction<1 and not settings.paper_mode:return False
         price=float(t.get('price_usd') or 0);sol_usd=float(t.get('sol_price_usd') or 0)
         if not 0<=time.time()-float(t.get('timestamp') or 0)<=120:return False
         if not all(math.isfinite(x) and x>0 for x in (price,sol_usd)):return False
@@ -28,7 +32,13 @@ class PaperTrader:
         else:
             # Preserve legacy positions without inventing historical cost or SOL prices.
             execution=price;proceeds=a*price/entry
-        sol=proceeds-a;pct=100*sol/a
+        sol=(proceeds-a)*fraction;pct=100*sol/(a*fraction)
+        if fraction<1:
+            child=self.store.partial_close(p,execution,time.time(),pct,sol,reason,fraction,t.get('market_cap_usd'),t.get('market_cap_is_fdv',False))
+            if child:
+                from intelligence.exit_learning import start
+                start(self.store.trade_table,child,t)
+            return bool(child)
         closed=self.store.close_trade(int(p['id']),execution,time.time(),pct,sol,reason,t.get('market_cap_usd'),t.get('market_cap_is_fdv',False))
         if closed:
             from intelligence.exit_learning import start

@@ -41,7 +41,7 @@ def step(observations):
         if not t:continue
         BOOK.mark_peak(p['id'],t.get('price_usd') or 0)
         d=should_exit(p,t)
-        if d['exit']:TRADER.sell(p,t,d['reason'])
+        if d['exit']:TRADER.sell(p,t,d['reason'],fraction=d.get('fraction',1))
     blockers=Counter();buys=0
     active=settings.paper_mode and now<meta['ends_at']
     if active:
