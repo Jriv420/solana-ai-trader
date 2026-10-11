@@ -55,10 +55,10 @@ class AdaptiveExits(unittest.IsolatedAsyncioTestCase):
         from datetime import datetime,timezone
         self.assertEqual(db.store.ai_request_count('jev_exit',datetime.now(timezone.utc).date().isoformat()),1)
     def test_action_contract_is_distinct_from_entry_score(self):
-        body=jev.request_body({'task':'paper_exit'},[]);self.assertIn('exit',body['questions']);self.assertEqual(len(body['questions']['exit']['criteria']),4)
-        self.assertEqual(jev.normalize_response({'answers':{'exit':{'type':'score','score':2}}})['action'],'sell_50')
-        for n in (True,1.5,4,-1,float('nan')):
-            with self.assertRaises(ValueError):jev.normalize_response({'answers':{'exit':{'type':'score','score':n}}})
+        body=jev.request_body({'task':'paper_exit'},[]);self.assertIn('exit',body['questions']);self.assertEqual(body['questions']['exit']['type'],'choice');self.assertEqual(set(body['questions']['exit']['criteria']),{'hold','sell_25','sell_50','sell_all'})
+        self.assertEqual(jev.normalize_response({'answers':{'exit':{'type':'choice','choice':'sell_50'}}})['action'],'sell_50')
+        for n in (True,1.5,'unknown',None):
+            with self.assertRaises(ValueError):jev.normalize_response({'answers':{'exit':{'type':'choice','choice':n}}})
         body=gemini_review.request_body({'task':'paper_exit','mint':'test'})
         self.assertEqual(body['generationConfig']['responseSchema']['required'],['action','reason'])
         data={'candidates':[{'finishReason':'STOP','content':{'parts':[{'text':json.dumps({'action':'hold','reason':'Incomplete narrative; flow stable.'})}]}}]}
