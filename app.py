@@ -32,6 +32,7 @@ from intelligence.token_identity import annotate as annotate_identity
 from strategy.token_filter import evaluate_token
 from strategy.entry import should_enter
 from strategy.exit import should_exit
+from data.narrative_trends import summary as narrative_trend_summary
 from strategy.sizing import position_size_sol
 from strategy.risk import hard_risk_check
 from paper.paper_trader import paper_trader
@@ -93,8 +94,9 @@ async def loop():
                 token=by.get(position['mint'])
                 if token:
                     store.mark_peak(position['id'],token.get('price_usd') or 0)
+                    token=dict(token,research=narrative_context(token['mint'],token))
                     decision=should_exit(position,token)
-                    if decision['exit']:paper_trader.sell(position,token,decision['reason'])
+                    if decision['exit']:paper_trader.sell(position,token,decision['reason'],fraction=decision.get('fraction',1))
             STATE["missed_learning"]=missed.summary()
             observations=[]
             semaphore=asyncio.Semaphore(4)
@@ -137,7 +139,7 @@ def healthz():return {"ready":True}
 @app.get("/")
 async def home():return FileResponse(D/"index.html")
 @app.get("/api/status")
-async def status():return {"activity_learning":activity_comparison(),"shadow":shadow_summary(),"risk_trial":risk_trial_status(),"paper_mode":settings.paper_mode,"balance_sol":paper_trader.balance_sol(),"open_positions":paper_trader.open_positions(),"agents":STATE["agents"],"error":STATE.get("error"),"new_pairs_feed":dict(FEED),"paper_metrics":store.paper_metrics(),"missed_learning":STATE.get("missed_learning",{}),"scan":STATE.get("scan"),"scan_started_at":STATE.get("scan_started_at")}
+async def status():return {"narrative_trends":narrative_trend_summary(),"activity_learning":activity_comparison(),"shadow":shadow_summary(),"risk_trial":risk_trial_status(),"paper_mode":settings.paper_mode,"balance_sol":paper_trader.balance_sol(),"open_positions":paper_trader.open_positions(),"agents":STATE["agents"],"error":STATE.get("error"),"new_pairs_feed":dict(FEED),"paper_metrics":store.paper_metrics(),"missed_learning":STATE.get("missed_learning",{}),"scan":STATE.get("scan"),"scan_started_at":STATE.get("scan_started_at")}
 @app.get("/api/opportunities")
 async def opps():return STATE["opportunities"]
 @app.get("/api/trades")
