@@ -7,6 +7,7 @@ from paper.paper_trader import PaperTrader
 from strategy.exit import should_exit
 from data.tracked_wallets import valid_address
 from paper.user_exit import exit_requested
+from strategy.sizing import position_size_sol
 BOOK=Store('shadow_trades')
 TRADER=PaperTrader(BOOK)
 STATE={}
@@ -53,11 +54,14 @@ def step(observations):
             if len(positions)>=3 or BOOK.daily_realized()<=-.15:break
             with store.conn() as c:last=c.execute('SELECT MAX(entry_time) n FROM shadow_trades WHERE mint=?',(t['mint'],)).fetchone()['n']
             if last and now-last<3600:continue
-            if TRADER.buy(t,.025,{'strategy':'aggressive momentum benchmark','entry_evidence':t,'rules':{'min_liquidity':5000,'min_volume_5m':2000,'min_change_5m':5,'buys_over_sells':True,'wallet_or_ai_required':False}}):buys+=1
+            # Momentum strength controls simulated size; this is not an AI confidence score.
+            strength=50+min(50,max(0,float(t.get('price_change_5m_pct') or 0)-5))
+            amount=position_size_sol(strength,TRADER.balance_sol())
+            if amount>0 and TRADER.buy(t,amount,{'strategy':'aggressive momentum benchmark','entry_evidence':t,'rules':{'min_liquidity':5000,'min_volume_5m':2000,'min_change_5m':5,'buys_over_sells':True,'wallet_or_ai_required':False}}):buys+=1
             else:blockers['balance or fresh fill unavailable']+=1
     STATE.update(active=active,paper_buys=buys,blockers=dict(blockers),checked_at=now)
     return dict(STATE)
 
 def summary():
     meta=initialize()
-    return dict(STATE,active=settings.paper_mode and time.time()<meta['ends_at'],started_at=meta['started_at'],ends_at=meta['ends_at'],balance_sol=TRADER.balance_sol(),metrics=BOOK.paper_metrics(),positions=[{k:v for k,v in p.items() if k!='context'} for p in BOOK.open()],trades=[{k:v for k,v in p.items() if k!='context'} for p in BOOK.all()[:20]],scope='Separate simulated account. Deterministic momentum benchmark, not AI discretion. Same estimated fees, slippage and exit rules as the main paper book.')
+    return dict(STATE,active=settings.paper_mode and time.time()<meta['ends_at'],started_at=meta['started_at'],ends_at=meta['ends_at'],balance_sol=TRADER.balance_sol(),min_buy_sol=settings.paper_min_buy_sol,max_buy_sol=min(settings.default_buy_sol,settings.max_trade_sol),metrics=BOOK.paper_metrics(),positions=[{k:v for k,v in p.items() if k!='context'} for p in BOOK.open()],trades=[{k:v for k,v in p.items() if k!='context'} for p in BOOK.all()[:20]],scope='Separate simulated account. Deterministic momentum benchmark, not AI discretion. Same estimated fees, slippage and exit rules as the main paper book.')
