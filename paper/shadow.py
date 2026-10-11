@@ -1,7 +1,7 @@
 """An isolated, deterministic aggressive paper benchmark; never a live order."""
 import math,time
 from collections import Counter
-from config.settings import settings,risk_trial_status
+from config.settings import settings,risk_trial_status,daily_loss_limit_enabled,paper_test_until
 from database.store import Store,store
 from paper.paper_trader import PaperTrader
 from strategy.exit import should_exit
@@ -18,6 +18,8 @@ def initialize():
     with store.conn() as c:
         c.execute('CREATE TABLE IF NOT EXISTS shadow_meta(id INTEGER PRIMARY KEY,started_at REAL,ends_at REAL)')
         c.execute('INSERT OR IGNORE INTO shadow_meta VALUES(1,?,?)',(time.time(),risk_trial_status()['ends_at'] or time.time()+86400))
+        until=paper_test_until()
+        if until:c.execute('UPDATE shadow_meta SET ends_at=? WHERE id=1',(until,))
         return dict(c.execute('SELECT * FROM shadow_meta WHERE id=1').fetchone())
 
 def eligible(t,now=None):
@@ -58,7 +60,8 @@ def step(observations,process_exits=True):
     pause=[]
     if not settings.paper_mode:pause.append('Paper trading disabled')
     elif not active:pause.append('Entry window ended')
-    if daily<=-.15:pause.append('Daily realized loss limit reached (0.15 SOL)')
+    loss_enabled=daily_loss_limit_enabled(settings)
+    if loss_enabled and daily<=-.15:pause.append('Daily realized loss limit reached (0.15 SOL)')
     if len(BOOK.open())>=3:pause.append('Maximum 3 open positions reached')
     if active and not pause:
         candidates=sorted(by.values(),key=lambda t:float(t.get('volume_5m_usd') or 0),reverse=True)
@@ -84,7 +87,7 @@ def step(observations,process_exits=True):
             amount=position_size_sol(strength,TRADER.balance_sol())
             if amount>0 and TRADER.buy(t,amount,{'strategy':'aggressive momentum benchmark','entry_evidence':t,'rules':{'min_liquidity':5000,'min_volume_5m':2000,'min_change_5m':5,'buys_over_sells':True,'wallet_or_ai_required':False}}):buys+=1
             else:blockers['balance or fresh fill unavailable']+=1
-    STATE.update(active=active,paper_buys=buys,blockers=dict(blockers),checked_at=now,entry_pause_reasons=pause,daily_realized_sol=daily,daily_loss_limit_sol=.15,daily_limit_resets_at=(int(now//86400)+1)*86400)
+    STATE.update(active=active,paper_buys=buys,blockers=dict(blockers),checked_at=now,entry_pause_reasons=pause,daily_realized_sol=daily,daily_loss_limit_sol=.15,daily_loss_limit_enabled=loss_enabled,daily_limit_resets_at=(int(now//86400)+1)*86400)
     return dict(STATE)
 
 def summary():

@@ -4,11 +4,24 @@ from collections import defaultdict
 from statistics import median
 from database.store import store
 _cache={}
+SUPMKT='3Y9QZ7TR3WUD1ZDsrjWe2uNAdXESZEBo2XacPw7Vpump'
+COLLAPSE_LESSON={
+    'id':'supmkt-collapse-2026-10-11','mint':SUPMKT,'recorded_at':1791736674,
+    'provenance':'user_reported_screenshot_unverified',
+    'chart_observation':'User screenshot shows SUPMKT near $3,552 market cap after a plateau around $1.3M and a sharp collapse.',
+    'user_claim':'Suspected artificial volume and engagement; user reports no dip-buying demand.',
+    'lesson':'Early momentum profits do not establish durable demand. Assess liquidity, buy-flow persistence through pullbacks, concentration and coordinated activity together. A collapse can exceed a stop trigger.',
+    'limitations':'A chart does not establish zero buyers or prove wash trading. No transaction-level confirmation or independent engagement verification. This later feedback must not relabel historical entry evidence. One example is not a validated strategy.'}
 
 def ensure():
     with store.conn() as c:
         c.execute('CREATE TABLE IF NOT EXISTS activity_labels(id INTEGER PRIMARY KEY,mint TEXT,recorded_at REAL,payload_json TEXT)')
         c.execute('CREATE INDEX IF NOT EXISTS activity_labels_mint ON activity_labels(mint,id)')
+        c.execute('CREATE TABLE IF NOT EXISTS activity_feedback_seeds(id TEXT PRIMARY KEY)')
+        inserted=c.execute('INSERT OR IGNORE INTO activity_feedback_seeds VALUES(?)',(COLLAPSE_LESSON['id'],)).rowcount
+        if inserted:
+            c.execute('INSERT INTO activity_labels(mint,recorded_at,payload_json) VALUES(?,?,?)',(SUPMKT,COLLAPSE_LESSON['recorded_at'],json.dumps({'volume':'suspected','engagement':'suspected','note':COLLAPSE_LESSON['chart_observation']+' '+COLLAPSE_LESSON['user_claim']+' Transaction-level confirmation unavailable.','source_url':''})))
+            __import__('logging').getLogger('uvicorn.error').info('NEXUS activity feedback recorded: %s',COLLAPSE_LESSON['id'])
 
 def save(mint,payload):
     ensure()
@@ -35,7 +48,7 @@ def context(mint,token,security,bundle):
     reported=label['volume'];engagement=label['engagement']
     volume_class='user_'+reported if reported!='unknown' else 'coordination_indicator' if any(x['kind']=='coordination_indicator' for x in indicators) else 'market_anomaly' if indicators else 'unknown'
     engagement_class='user_'+engagement if engagement!='unknown' else 'unknown'
-    return {'user_review':label,'indicators':indicators,'volume_class':volume_class,'engagement_class':engagement_class,
+    return {'user_review':label,'indicators':indicators,'volume_class':volume_class,'engagement_class':engagement_class,'reviewed_examples':[dict(COLLAPSE_LESSON)],
         'coverage':{'distinct_buyer_analysis':'not_connected','circular_trade_analysis':'not_connected','pump_comments':'not_connected','x_reply_bot_analysis':'not_connected'},
         'scope':'User labels are unverified. Indicators are not scam proof. Missing comments/search results are not evidence of fake engagement. Activity flags do not automatically block the aggressive paper account.'}
 
