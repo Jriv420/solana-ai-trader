@@ -42,3 +42,20 @@ class OpenJev(unittest.TestCase):
                 with self.assertRaises(RuntimeError):await jev.ask_jev({},[])
                 self.assertEqual(len(calls),2)
         asyncio.run(exercise())
+
+
+class AggressivePromptTests(unittest.TestCase):
+    def test_aggressive_keeps_wallet_optional_after_trial_ends(self):
+        from intelligence.jev import request_body
+        body=request_body({'book':'shadow_trades','paper_risk_trial':{'active':False}},[])
+        q=body['questions']['setup']
+        self.assertIn('wallets are helpful but optional',q['criteria'][3])
+        self.assertIn('Aggressive momentum paper account',q['instructions'])
+        self.assertIn('no opinion, not a negative vote',q['instructions'])
+        original=request_body({'book':'trades','paper_risk_trial':{'active':False}},[])
+        self.assertIn('qualified wallets',original['questions']['setup']['criteria'][3])
+        self.assertNotIn('optional',original['questions']['setup']['criteria'][3])
+    def test_exit_contract_remains_exit_only(self):
+        from intelligence.jev import request_body
+        body=request_body({'book':'shadow_trades','task':'paper_exit'},[])
+        self.assertIn('exit',body['questions']);self.assertNotIn('setup',body['questions'])
