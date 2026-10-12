@@ -79,3 +79,20 @@ class ActivityTests(unittest.TestCase):
             self.assertEqual(client.post(path,json={'source_url':'javascript:alert(1)'},headers=headers).status_code,400)
             self.assertEqual(client.post(path,json={'volume':'suspected','note':'Bots'},headers=headers).status_code,200)
             self.assertEqual(client.get('/api/research/'+MINT).json()['activity']['user_review']['note'],'Bots')
+
+    def test_recorded_scam_lesson_and_hourly_turnover_are_not_scam_labels(self):
+        c=activity.context(MINT,{'market_cap_usd':1000000,'volume_1h_usd':37000},{},{})
+        self.assertAlmostEqual(c['hourly_volume_to_market_cap'],.037)
+        self.assertTrue(any(x['kind']=='low_hourly_turnover_at_large_cap' for x in c['indicators']))
+        self.assertEqual(c['reviewed_examples'][1]['id'],'sajadflips-secretfrog-video-2026-10-11')
+        self.assertEqual(c['engagement_class'],'unknown')
+        self.assertIsNone(activity.context(MINT,{'market_cap_usd':1000000},{},{})['hourly_volume_to_market_cap'])
+        self.assertEqual(c['coverage']['live_bubble_maps'],'not_connected')
+    def test_no_bundle_does_not_clear_fresh_flagged_majority(self):
+        from data.bundle_research import evidence_flags
+        report={'status':'no_bundle','holdings_fresh':True,'flaggedHoldPct':55,'insidersHoldPct':57}
+        flags=evidence_flags(report)
+        self.assertEqual(len(flags),1);self.assertEqual(flags[0]['maximum_reported_pct'],57)
+        self.assertEqual(evidence_flags(dict(report,holdings_fresh=False)),[])
+        self.assertEqual(evidence_flags(dict(report,status='stale')),[])
+        self.assertEqual(evidence_flags({'status':'no_bundle','holdings_fresh':True,'flaggedHoldPct':False}),[])

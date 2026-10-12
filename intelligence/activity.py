@@ -13,6 +13,12 @@ COLLAPSE_LESSON={
     'lesson':'Early momentum profits do not establish durable demand. Assess liquidity, buy-flow persistence through pullbacks, concentration and coordinated activity together. A collapse can exceed a stop trigger.',
     'limitations':'A chart does not establish zero buyers or prove wash trading. No transaction-level confirmation or independent engagement verification. This later feedback must not relabel historical entry evidence. One example is not a validated strategy.'}
 
+SCAM_REVIEW_LESSON={
+    'id':'sajadflips-secretfrog-video-2026-10-11','source':'User-supplied recording of @SajadFlips X post about $SECRETFROG','provenance':'recorded speaker claims; exact token contract and underlying transactions not independently verified',
+    'claims':'Speaker compares roughly 2% and 57% wallet clusters across tools; cites 7.6% first-second buying, about 55% suspicious holdings, around $37K hourly volume at about $1M cap, isolated pump candles and a displayed 4.25% trading tax.',
+    'lesson':'A no_bundle launch finding is not a current distribution all-clear. Check fresh linked/flagged holdings, early purchase concentration, relative turnover, independently sourced ownership evidence and transaction fees. Provider disagreement requires investigation, not averaging cluster percentages. Isolated candles and a straight launch rise are hypotheses, not proof of bundling. High market cap and prior gains do not establish broad demand. Unknown fees must remain unknown; include verified costs before judging profit.',
+    'limitations':'The bot does not read live bubble maps, 30-second candles or GMGN displayed taxes. These are recorded claims, not automatic scam labels. No exact mint is inferred from a ticker. Proxima tooling alone does not prove fraud. Different graphs can cover different holders/time windows; linked transfers can be legitimate.'}
+
 def ensure():
     with store.conn() as c:
         c.execute('CREATE TABLE IF NOT EXISTS activity_labels(id INTEGER PRIMARY KEY,mint TEXT,recorded_at REAL,payload_json TEXT)')
@@ -45,11 +51,19 @@ def context(mint,token,security,bundle):
         if all(math.isfinite(x) for x in (volume,liq)) and liq>0 and volume/liq>=5 and total>=100 and abs(buys-sells)/total<=.1:
             indicators.append({'kind':'high_turnover_balanced_flow','source':'DEX aggregate snapshot','message':'High turnover with balanced buy/sell counts; genuine two-way trading can also cause this. Distinct buyers and circular trades are not established.'})
     except (ValueError,TypeError):pass
+    relative_turnover=None
+    try:
+        cap=float(token.get('market_cap_usd'));hourly=float(token.get('volume_1h_usd'))
+        if math.isfinite(cap) and cap>0 and math.isfinite(hourly) and hourly>=0:
+            relative_turnover=hourly/cap
+            if cap>=1000000 and relative_turnover<.05:
+                indicators.append({'kind':'low_hourly_turnover_at_large_cap','source':'DEX aggregate snapshot','ratio':relative_turnover,'message':'Hourly turnover below 5% at $1M+ cap is a review hypothesis, not proof of manipulation. Token age, quiet market periods and FDV versus circulating cap can affect this ratio.'})
+    except (TypeError,ValueError):pass
     reported=label['volume'];engagement=label['engagement']
     volume_class='user_'+reported if reported!='unknown' else 'coordination_indicator' if any(x['kind']=='coordination_indicator' for x in indicators) else 'market_anomaly' if indicators else 'unknown'
     engagement_class='user_'+engagement if engagement!='unknown' else 'unknown'
-    return {'user_review':label,'indicators':indicators,'volume_class':volume_class,'engagement_class':engagement_class,'reviewed_examples':[dict(COLLAPSE_LESSON)],
-        'coverage':{'distinct_buyer_analysis':'not_connected','circular_trade_analysis':'not_connected','pump_comments':'not_connected','x_reply_bot_analysis':'not_connected'},
+    return {'user_review':label,'indicators':indicators,'volume_class':volume_class,'engagement_class':engagement_class,'hourly_volume_to_market_cap':relative_turnover,'reviewed_examples':[dict(COLLAPSE_LESSON),dict(SCAM_REVIEW_LESSON)],
+        'coverage':{'distinct_buyer_analysis':'not_connected','circular_trade_analysis':'not_connected','pump_comments':'not_connected','x_reply_bot_analysis':'not_connected','live_bubble_maps':'not_connected','30_second_candles':'not_connected','token_tax_verification':'not_connected'},
         'scope':'User labels are unverified. Indicators are not scam proof. Missing comments/search results are not evidence of fake engagement. Activity flags do not automatically block the aggressive paper account.'}
 
 def comparison(horizon='1h'):

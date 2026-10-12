@@ -58,6 +58,8 @@ def context(mint,token=None):
     launch_bundle=bundle_context(mint)
     if launch_bundle.get('status') in {'bundled','proxima','sumo','proxima_after_launch'}:
         provider_flags.append({'name':'Is It Bundled? launch finding','description':'Provider reports '+launch_bundle['status']+'; bundled supply '+str(launch_bundle.get('bundledPct'))+'%. Not proof of fraud or fake engagement.','source':'Is It Bundled?','report':launch_bundle['report']})
+    from data.bundle_research import evidence_flags
+    provider_flags.extend(evidence_flags(launch_bundle))
     bundle={'status':'indicators_found' if clusters or provider_flags else 'not_detected_in_sample' if events or security.get('status')=='ok' else 'unknown','same_slot_buyer_groups':clusters[:10],'provider_flags':provider_flags,'scope':'Partial wallet history and provider flags; coordinated timing is not proof of a Jito bundle or common ownership.'}
     features={'security_status':security.get('status','pending'),'identity_status':','.join(sorted({c.get('identity','unknown') for c in reviews})) or 'unknown','endorsement_status':','.join(sorted({c.get('endorsement','unknown') for c in reviews})) or 'unknown','narrative':'speculative' if speculative else 'reviewed_confirmed' if reviews else 'unknown','acquisition':'transfer_and_buy' if received and bought else 'received_transfer' if received else 'buy' if bought else 'unknown','large_received_transfer':large,'bundle_indicator':bool(clusters or provider_flags),'rug_danger':bool(security.get('danger'))}
     bundle['launch_report']=launch_bundle

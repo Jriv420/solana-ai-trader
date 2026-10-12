@@ -71,13 +71,26 @@ def cached(mint):
     return result
 
 
+def evidence_flags(report):
+    # Launch bundling and current linked holdings are different propositions.
+    if report.get('status') not in VALID_STATUSES-{'unscanned'}:return []
+    flags=[]
+    if report.get('madeWithProxima') is True or report.get('proximaAfterLaunch') is True:
+        flags.append({'name':'Provider Proxima launch-tool classification','description':'Launch-tool evidence, not proof of fraud or common ownership.','source':'Is It Bundled?'})
+    if report.get('holdings_fresh'):
+        values=[report.get(k) for k in ('insidersHoldPct','flaggedHoldPct')]
+        values=[v for v in values if isinstance(v,(int,float)) and not isinstance(v,bool) and 0<=v<=100]
+        if values and max(values)>=50:
+            flags.append({'name':'Provider flagged holding concentration','description':'Provider reports at least 50% flagged/insider holdings. A no_bundle launch result does not clear current concentration. Categories may overlap; do not add them or assume verified common ownership.','maximum_reported_pct':max(values),'source':'Is It Bundled?'})
+    return flags
+
 def features(report):
     available = report.get('status') in VALID_STATUSES - {'unscanned'}
     pct = report.get('bundledPct') if available else None
     group = 'unknown' if pct is None else 'under_5' if pct < 5 else '5_to_20' if pct < 20 else '20_plus'
     return {'launch_bundle_group': group, 'bundle_provider_status': report.get('status', 'pending'),
             'bundle_estimate': 'yes' if report.get('estimate') is True else 'no' if report.get('estimate') is False and available else 'unknown',
-            'bundle_current_risk': report.get('risk') or 'unknown'}
+            'bundle_current_risk': report.get('risk') or 'unknown','current_flagged_majority':any(x['name']=='Provider flagged holding concentration' for x in evidence_flags(report))}
 
 
 async def check_batch(mints):
