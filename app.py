@@ -146,9 +146,10 @@ async def loop():
 @asynccontextmanager
 async def life(app):
     from intelligence.user_wallet_study import loop as personal_wallet_loop
+    from data.historical_prices import loop as historical_prices_loop
     from intelligence.model_team import inventory
     logging.getLogger('uvicorn.error').info('NEXUS model team inventory %s',inventory())
-    tasks=[asyncio.create_task(personal_wallet_loop()),asyncio.create_task(protection_loop()),asyncio.create_task(loop()),asyncio.create_task(stream_new_tokens()),asyncio.create_task(wallet_learning_loop()),asyncio.create_task(security_loop()),asyncio.create_task(bundle_loop()),asyncio.create_task(social_loop()),asyncio.create_task(wallet_signals_loop()),asyncio.create_task(research_loop())]
+    tasks=[asyncio.create_task(historical_prices_loop()),asyncio.create_task(personal_wallet_loop()),asyncio.create_task(protection_loop()),asyncio.create_task(loop()),asyncio.create_task(stream_new_tokens()),asyncio.create_task(wallet_learning_loop()),asyncio.create_task(security_loop()),asyncio.create_task(bundle_loop()),asyncio.create_task(social_loop()),asyncio.create_task(wallet_signals_loop()),asyncio.create_task(research_loop())]
     try:
         yield
     finally:

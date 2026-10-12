@@ -4,6 +4,7 @@ from collections import defaultdict
 from decimal import Decimal
 from datetime import datetime,timezone
 from statistics import median
+from collections import Counter
 import httpx
 from config.settings import settings
 from database.store import store
@@ -47,7 +48,8 @@ def evaluate(events):
 def summary():
     s=state()
     with store.conn() as c:rows=c.execute('SELECT event_json FROM user_wallet_study_events WHERE address=? ORDER BY timestamp',(s['address'],)).fetchall()
-    return dict(s,analysis=evaluate([json.loads(r[0]) for r in rows]),owner_claim='User identifies this as their wallet; ownership not cryptographically verified.',
+    from data.historical_prices import summary as price_summary
+    return dict(s,price_history=[{k:v for k,v in x.items() if k!='candles'} for x in price_summary(s['address'])],analysis=evaluate([json.loads(r[0]) for r in rows]),owner_claim='User identifies this as their wallet; ownership not cryptographically verified.',
         scope='Observed, unambiguous SOL-quoted swaps only. Transfers, deposits, unknown routes and unparsed windows are excluded or invalidate cost basis. Partial historical coverage, not lifetime PnL. Two-year peak price/cap, original narrative and holder distribution are not verified. SOL returns are not historical USD returns. No automatic copying or model-weight training.')
 async def step():
     s=state()
@@ -70,12 +72,12 @@ async def step():
             event=normalize_transaction(item,s['address'])
             if event:events.append(event)
             elif item.get('signature') and stamp and (item.get('parserStatus')!='OK' or tx.get('transactionStatus') not in ('OK','FAILED')):
-                events.append({'signature':item['signature'],'timestamp':stamp,'slot':tx.get('slot',0),'kind':'invalidate_all'})
+                events.append({'signature':item['signature'],'timestamp':stamp,'slot':tx.get('slot',0),'kind':'invalidate_all','mints':sorted({t.get('mint') for t in tx.get('tokenTransfers',[]) if valid_address(t.get('mint')) and s['address'] in (t.get('toUserAccount'),t.get('fromUserAccount'))})})
         with store.conn() as c:
             for e in events:c.execute('INSERT OR IGNORE INTO user_wallet_study_events VALUES(?,?,?,?)',(s['address'],e['signature'],e['timestamp'],json.dumps(e)))
         cursor=data.get('paginationToken');s.update(status='importing' if cursor else 'history_end_reached',cursor=cursor,complete=not bool(cursor),pages=s['pages']+1,transactions_seen=s['transactions_seen']+len(items),checked_at=time.time())
         if stamps:s.update(newest_time=max(s.get('newest_time') or 0,max(stamps)),oldest_time=min(s.get('oldest_time') or min(stamps),min(stamps)))
-        save(s);a=summary()['analysis'];logging.getLogger('uvicorn.error').info('NEXUS personal wallet study status=%s pages=%s transactions=%s oldest=%s matched_sales=%s completed_positions=%s',s['status'],s['pages'],s['transactions_seen'],s.get('oldest_time'),a['matched_sales'],a['completed_positions'])
+        s['last_page_event_kinds']=dict(Counter(e['kind'] for e in events));s['last_page_parser_statuses']=dict(Counter(str(x.get('parserStatus')) for x in items));s['last_page_transaction_statuses']=dict(Counter(str((x.get('parsed') or {}).get('transactionStatus')) for x in items));save(s);a=summary()['analysis'];logging.getLogger('uvicorn.error').info('NEXUS personal wallet study status=%s pages=%s transactions=%s oldest=%s matched_sales=%s completed_positions=%s event_kinds=%s',s['status'],s['pages'],s['transactions_seen'],s.get('oldest_time'),a['matched_sales'],a['completed_positions'],s['last_page_event_kinds'])
     except Exception as exc:s.update(status='history_unavailable_'+type(exc).__name__,checked_at=time.time());save(s)
 async def loop():
     while True:
