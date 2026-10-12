@@ -253,3 +253,5 @@ Continuous paper mode uses `PAPER_CONTINUOUS=true` to remove the aggressive acco
 
 
 Darwin Compute uses `DARWIN_ENDPOINT=https://darwincompute.com/v1/chat/completions`, `DARWIN_MODEL=darwin` and a Darwin key via Bearer authorization. The native adapter sends bounded chat-completion messages and validates a complete JSON result. Actual routed model/rung are taken from documented `x-darwin-model` / `x-darwin-rung` headers, or returned model metadata. Darwin is a routing service, not another foundation model; its route may overlap with another reviewer and is not assumed statistically independent. HTTP 402 is shown as `darwin_credits_required` and enters a cooldown; the bot does not purchase/burn tokens or link provider keys. See https://darwincompute.com/docs .
+
+Darwin's daily cap now counts only real outbound HTTP attempts (`darwin_http`), after the cooldown and request validation checks. The earlier `darwin_team` counter counted local blocked reviews and remains preserved as historical data. Runtime logs verified that October 12 UTC had only local cooldown/limit checks before this correction; no outbound calls were reset or replayed.

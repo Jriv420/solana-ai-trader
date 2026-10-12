@@ -1,6 +1,8 @@
 """Darwin Compute's documented OpenAI-compatible chat-completions gateway."""
 import asyncio,json,math,re,time
 import httpx
+from datetime import datetime,timezone
+from database.store import store
 from config.settings import settings
 from intelligence.openai_review import ReviewPaused
 _semaphore=asyncio.Semaphore(1)
@@ -42,8 +44,13 @@ async def ask_darwin(prompt,data):
     if not settings.darwin_api_key or not settings.darwin_endpoint:raise ReviewPaused('not_configured')
     async with _semaphore:
         if time.time()<_blocked_until:raise ReviewPaused('cooldown')
+        body=request_body(prompt,data)
+        day=datetime.now(timezone.utc).date().isoformat()
+        # Count only actual outbound attempts. The former team counter included
+        # cooldown checks; retain it as historical review-attempt data.
+        if not store.reserve_ai_request('darwin_http',day,30):raise ReviewPaused('daily_team_limit_reached')
         async with httpx.AsyncClient(timeout=max(1,settings.darwin_timeout_ms/1000)) as client:
-            response=await client.post(settings.darwin_endpoint,json=request_body(prompt,data),headers={'Authorization':'Bearer '+settings.darwin_api_key})
+            response=await client.post(settings.darwin_endpoint,json=body,headers={'Authorization':'Bearer '+settings.darwin_api_key})
         if response.status_code==402:
             _blocked_until=time.time()+3600;raise ReviewPaused('darwin_credits_required')
         if response.status_code in (401,403):
