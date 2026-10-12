@@ -26,7 +26,7 @@ def history(book,now):
     import database.store as db
     key=(str(db.DB),book);cached=_CACHE.get(key)
     if cached and 0<=now-cached[0]<30:return cached[1]
-    items=sorted((p for p in positions(book) if p['complete'] and p['costed'] and p['exit_time']<now and p['entry_time']>=now-30*86400 and math.isfinite(p['return_pct'])),key=lambda p:p['exit_time'])[-500:]
+    items=sorted((p for source in ('trades','shadow_trades') for p in positions(source) if p['complete'] and p['costed'] and p['exit_time']<now and p['entry_time']>=now-30*86400 and math.isfinite(p['return_pct'])),key=lambda p:p['exit_time'])[-500:]
     _CACHE[key]=(now,items)
     if len(_CACHE)>4:_CACHE.pop(next(iter(_CACHE)))
     return items
@@ -53,7 +53,7 @@ def assess(book,token,now=None):
     avoid=bool(repeat or any(m['avoid'] for m in matches))
     return {'version':VERSION,'action':'avoid' if avoid else 'allow','checked_at':now,'matches':matches,
             'reason':'24h cooldown after this contract lost at least 50%' if repeat else 'Matching entry cohort has repeated severe losses and negative average net return' if avoid else 'No sufficiently supported loss pattern; existing rules still apply',
-            'scope':'Paper-only empirical gate, not a profit probability or model training. Latest 500 completed costed positions within 30 days; one coin per cohort, candidate coin excluded from cohort statistics. Unknown data does not establish a pattern. A cohort needs 8 coins, at least 60% losses, 2 losses of 50% or worse and negative average return. Correlation can reflect the old exit policy, market regime or missing data. No safety checks are relaxed.'}
+            'scope':'Paper-only empirical gate, not a profit probability or model training. Shared evidence from both accounts: latest 500 completed costed positions within 30 days; one coin per cohort, candidate coin excluded from cohort statistics. Unknown data does not establish a pattern. A cohort needs 8 coins, at least 60% losses, 2 losses of 50% or worse and negative average return. Correlation can reflect the old exit policy, market regime or missing data. No safety checks are relaxed.'}
 
 
 def safe_assess(book,token):

@@ -50,6 +50,8 @@ async def manage_exits(observations):
 
 async def prepare_entries(observations):
     from intelligence.model_team import entry
+    from paper.accounts import enabled
+    if not enabled(BOOK.trade_table):return
     candidates=sorted((o['token'] for o in observations),key=lambda t:float(t.get('volume_5m_usd') or 0),reverse=True)
     slots=max(0,3-len(BOOK.open()));reviewed=0
     for t in candidates:
@@ -73,7 +75,9 @@ def step(observations,process_exits=True):
     blockers=Counter();buys=0
     active=settings.paper_mode and (meta['ends_at'] is None or now<meta['ends_at'])
     daily=BOOK.daily_realized(now)
+    from paper.accounts import enabled
     pause=[]
+    if not enabled(BOOK.trade_table):pause.append("Account stopped by user; exits continue")
     if not settings.paper_mode:pause.append('Paper trading disabled')
     elif not active:pause.append('Entry window ended')
     loss_enabled=daily_loss_limit_enabled(settings)
@@ -113,4 +117,5 @@ def step(observations,process_exits=True):
 
 def summary():
     meta=initialize();history=BOOK.position_history()
-    return dict(STATE,active=settings.paper_mode and (meta['ends_at'] is None or time.time()<meta['ends_at']),continuous=meta['ends_at'] is None,started_at=meta['started_at'],ends_at=meta['ends_at'],balance_sol=TRADER.balance_sol(),min_buy_sol=settings.paper_min_buy_sol,max_buy_sol=min(settings.default_buy_sol,settings.max_trade_sol),metrics=BOOK.paper_metrics(),positions=[p for p in history if p['status']=='open'],trades=history,scope='Separate simulated account. Momentum entries with outcome-based paper entry restrictions and AI-reviewed exits. Estimated fees and slippage; protective limits and explicit rule fallbacks remain.')
+    from paper.accounts import enabled
+    return dict(STATE,entries_enabled=enabled(BOOK.trade_table),active=settings.paper_mode and (meta['ends_at'] is None or time.time()<meta['ends_at']),continuous=meta['ends_at'] is None,started_at=meta['started_at'],ends_at=meta['ends_at'],balance_sol=TRADER.balance_sol(),min_buy_sol=settings.paper_min_buy_sol,max_buy_sol=min(settings.default_buy_sol,settings.max_trade_sol),metrics=BOOK.paper_metrics(),positions=[p for p in history if p['status']=='open'],trades=history,scope='Separate simulated account. Momentum entries with outcome-based paper entry restrictions and AI-reviewed exits. Estimated fees and slippage; protective limits and explicit rule fallbacks remain.')

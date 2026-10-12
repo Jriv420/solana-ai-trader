@@ -1,9 +1,10 @@
 <!doctype html>
 <html lang="en">
-<head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="theme-color" content="#050e1c"><title>Nexus · Explore</title><link rel="stylesheet" href="/static/style.css?v=navy-2"></head>
+<head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="theme-color" content="#050e1c"><title>Nexus · Explore</title><link rel="stylesheet" href="/static/style.css?v=navy-3"></head>
 <body><main class="shell">
 <header><div class="brand"><span class="brand-mark" aria-hidden="true">N</span><div><h1>NEXUS</h1><p>Solana discovery</p></div></div><span id="mode">PAPER</span></header>
 <label class="account-picker">Paper account <select id="paper-account"><option value="aggressive">Aggressive momentum</option><option value="original">Original AI strategy</option></select></label>
+<div class="account-control"><span id="account-run-status" role="status">Checking strategy…</span><button id="account-run-toggle" disabled>Checking…</button></div><p class="control-note">Stop pauses new buys; open positions keep exit protection. Both accounts share learning.</p>
 <section class="stats" aria-label="Account summary"><div><small id="balance-label">Available paper balance</small><strong id="balance">— SOL</strong></div><div><small>Open positions</small><strong id="positions">0</strong></div><span class="refresh-note">Updates every 5s</span></section>
 <div class="explore-heading"><div><p class="eyebrow">YOUR MARKET FEED</p><h2>Explore coins</h2></div></div>
 <label class="search-box"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" aria-hidden="true"><circle cx="10.5" cy="10.5" r="6.5"/><path d="m16 16 4.5 4.5"/></svg><input id="coin-search" type="search" placeholder="Search name, ticker or contract" aria-label="Search loaded coins" autocomplete="off"></label>
@@ -27,4 +28,4 @@
 <form id="wallet-form"><label>Public wallet address<input id="wallet-address" required minlength="32" maxlength="44" autocomplete="off" placeholder="Solana wallet address"></label><label>Name (optional)<input id="wallet-label" maxlength="100" placeholder="Wallet label"></label><button type="submit">Add wallet</button><p id="wallet-form-message" role="status"></p></form>
 </div></section><section id="content" aria-live="polite"></section>
 <footer>Market discovery · Paper trading</footer>
-</main><script src="/static/app.js?v=navy-2"></script></body></html>
+</main><script src="/static/app.js?v=navy-3"></script></body></html>

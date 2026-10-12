@@ -1,6 +1,7 @@
 const openDetails = new Set(), walletDetails = new Map(), walletLoading = new Set();
 let currentPage = 'new';
 let paperAccount='aggressive';
+let accountControlBusy=false;
 try {const saved=localStorage.getItem('nexus-paper-account');if(['original','aggressive'].includes(saved))paperAccount=saved;} catch {}
 let researchMint=null, researchData=null;
 let connectionData={};
@@ -144,6 +145,9 @@ function updateAccountSummary() {
   document.getElementById('balance-label').textContent=a.label+' · available';
   document.getElementById('balance').textContent=a.balance == null ? '— SOL':Number(a.balance).toFixed(4)+' SOL';
   document.getElementById('positions').textContent=a.positions.length;
+  const control=status.account_controls?.[paperAccount],button=document.getElementById('account-run-toggle');
+  document.getElementById('account-run-status').textContent=control ? a.label+' · '+(control.entries_enabled ? 'Entries enabled':'Stopped · exits active'):'Checking strategy…';
+  button.disabled=accountControlBusy || !control;button.textContent=accountControlBusy ? 'Updating…':control?.entries_enabled ? 'Stop strategy':'Start strategy';
 }
 function tokenPrice(value) {
   if(value==null || !Number.isFinite(Number(value)) || Number(value)<=0)return '—';
@@ -198,7 +202,7 @@ function render() {
   let html = refreshError ? `<p role="status">${escapeHtml(refreshError)}</p>`:'';
   updateAccountSummary();
   const trial=paperAccount==='original' ? status.risk_trial:null;
-  if(paperAccount==='aggressive' && ['positions','history','agents','scan'].includes(currentPage))html+=`<div class="card"><h2>Aggressive momentum paper account</h2><p>${status.shadow?.active ? 'Running':'Entry window ended'} · ${status.shadow?.continuous ? 'Continuous paper trading': 'Entries end '+stamp(status.shadow?.ends_at)} · Open positions continue AI exit reviews with protective limits and rule fallbacks.</p></div>`;
+  if(paperAccount==='aggressive' && ['positions','history','agents','scan'].includes(currentPage))html+=`<div class="card"><h2>Aggressive momentum paper account</h2><p>${status.account_controls?.aggressive?.entries_enabled===false ? 'Stopped · open exits continue':status.shadow?.active ? 'Running':'Entry window ended'} · ${status.shadow?.continuous ? 'Continuous paper trading': 'Entries end '+stamp(status.shadow?.ends_at)} · Open positions continue AI exit reviews with protective limits and rule fallbacks.</p></div>`;
   if(trial?.active) html+=`<div class="card"><h2>Riskier paper trial</h2><p>Ends ${stamp(trial.ends_at)} · automatic return to normal rules</p><p>Liquidity ≥ ${money(trial.min_liquidity_usd)} · score ≥ ${Number(trial.min_combined_score)} · wallet ≥ ${Number(trial.min_wallet_score)}<br>Buy cap ${Number(trial.max_trade_sol)} SOL · ${Number(trial.max_open_positions)} positions · daily loss pause ${trial.daily_loss_limit_enabled === false ? 'disabled for paper testing':Number(trial.max_daily_loss_sol)+' SOL'}</p></div>`;
   if(paperAccount==='aggressive' && ['positions','history','agents','scan'].includes(currentPage)) {
     const pauses=status.shadow?.entry_pause_reasons || [];
@@ -223,6 +227,17 @@ function render() {
   else if (currentPage==='history') html += tradeCards(selectedAccount().trades);
   document.getElementById('content').innerHTML = html;
 }
+document.getElementById('account-run-toggle').addEventListener('click',async()=>{
+ if(accountControlBusy || !status.account_controls?.[paperAccount])return;
+ const account=paperAccount,enabled=!status.account_controls[account].entries_enabled;
+ accountControlBusy=true;updateAccountSummary();
+ try {
+  const response=await fetch('/api/paper-accounts/'+account+'/control',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({entries_enabled:enabled})});
+  if(!response.ok)throw new Error('HTTP '+response.status);
+  const data=await response.json();++accountRequest;status.account_controls=data.account_controls;refreshError='';render();
+ }catch(error){refreshError='Strategy control failed; state was not confirmed. Refresh and try again.';render();}
+ finally{accountControlBusy=false;updateAccountSummary();}
+});
 document.querySelectorAll('nav button').forEach(button => button.addEventListener('click',()=>{currentPage=button.dataset.v;selectedMint=null;tokenSort='default';document.querySelector('.nav-more')?.removeAttribute('open');render();}));
 document.getElementById('content').addEventListener('click',async event=>{
   const copyButton=event.target.closest('button[data-copy-ca]');
@@ -322,13 +337,13 @@ document.getElementById('research-form').addEventListener('submit',async event=>
 
 function shadowView() {
  const s=status.shadow || {},m=s.metrics || {};
- return `<div class="card"><h2>Aggressive paper benchmark</h2><p>${s.active ? 'Running':'Entry window ended'} · Started ${stamp(s.started_at)} · ${s.continuous ? 'Continuous paper trading':'Entries end '+stamp(s.ends_at)}</p><p>Separate balance: ${Number(s.balance_sol || 0).toFixed(4)} SOL · ${Number(m.closed_trades || 0)} closed · ${Number((s.positions || []).length)} open<br>Realized net PnL: ${Number(m.net_pnl_sol || 0).toFixed(4)} SOL · Completed-position win rate: ${m.win_rate_pct == null ? '—':m.win_rate_pct+'%'}</p><p>Entry: liquidity ≥$5,000, 5m volume ≥$2,000, 5m change ≥5%, more buys than sells, current RugCheck without danger. Wallet and AI scores are not required. Bundle warnings remain recorded. ${Number(s.min_buy_sol || .05)}–${Number(s.max_buy_sol || .1)} SOL per new buy (momentum strength), 3 open positions, ${s.daily_loss_limit_enabled === false ? 'Daily loss pause disabled for paper testing.':'0.15 SOL daily realized loss limit (UTC).'}</p><p>${escapeHtml(s.scope || '')} Open positions continue normal exits after the entry window ends. Realized PnL excludes open-position gains/losses.</p><p>Last scan: ${stamp(s.checked_at)} · ${escapeHtml(JSON.stringify(s.blockers || {}))}</p><ul>${(s.trades || []).slice(0,20).map(t=>`<li>$${escapeHtml(t.symbol)} · ${escapeHtml(t.status)} · ${stamp(t.entry_time)} · ${t.pnl_sol == null ? 'PnL pending':Number(t.pnl_sol).toFixed(4)+' SOL'}<br><span class="mint">${escapeHtml(t.mint)}</span></li>`).join('') || '<li>No benchmark trades yet.</li>'}</ul></div>`;
+ return `<div class="card"><h2>Aggressive paper benchmark</h2><p>${status.account_controls?.aggressive?.entries_enabled===false ? 'Stopped · open exits continue':s.active ? 'Running':'Entry window ended'} · Started ${stamp(s.started_at)} · ${s.continuous ? 'Continuous paper trading':'Entries end '+stamp(s.ends_at)}</p><p>Separate balance: ${Number(s.balance_sol || 0).toFixed(4)} SOL · ${Number(m.closed_trades || 0)} closed · ${Number((s.positions || []).length)} open<br>Realized net PnL: ${Number(m.net_pnl_sol || 0).toFixed(4)} SOL · Completed-position win rate: ${m.win_rate_pct == null ? '—':m.win_rate_pct+'%'}</p><p>Entry: liquidity ≥$5,000, 5m volume ≥$2,000, 5m change ≥5%, more buys than sells, current RugCheck without danger. Wallet and AI scores are not required. Bundle warnings remain recorded. ${Number(s.min_buy_sol || .05)}–${Number(s.max_buy_sol || .1)} SOL per new buy (momentum strength), 3 open positions, ${s.daily_loss_limit_enabled === false ? 'Daily loss pause disabled for paper testing.':'0.15 SOL daily realized loss limit (UTC).'}</p><p>${escapeHtml(s.scope || '')} Open positions continue normal exits after the entry window ends. Realized PnL excludes open-position gains/losses.</p><p>Last scan: ${stamp(s.checked_at)} · ${escapeHtml(JSON.stringify(s.blockers || {}))}</p><ul>${(s.trades || []).slice(0,20).map(t=>`<li>$${escapeHtml(t.symbol)} · ${escapeHtml(t.status)} · ${stamp(t.entry_time)} · ${t.pnl_sol == null ? 'PnL pending':Number(t.pnl_sol).toFixed(4)+' SOL'}<br><span class="mint">${escapeHtml(t.mint)}</span></li>`).join('') || '<li>No benchmark trades yet.</li>'}</ul></div>`;
 }
 function entryLearningView(d) {
   const e=d.entry_learning || {};
   const marks=Object.entries(e.outcomes || {}).map(([action,m])=>`<tr><td>${escapeHtml(action)}</td><td>${Number(m.samples || 0)}</td><td>${Number(m.positive_pct || 0).toFixed(1)}%</td><td>${Number(m.mean_net_return_pct || 0).toFixed(1)}%</td></tr>`).join('');
   const recent=(e.recent || []).map(r=>`<li><span class="mint">${escapeHtml(r.mint)}</span> · ${stamp(r.at)}<br><strong>${escapeHtml(r.decision?.action)}</strong> · ${escapeHtml(r.decision?.reason)}${r.outcome ? '<br>One-hour costed mark: '+Number(r.outcome.net_return_pct).toFixed(1)+'%':''}<br><span class="muted">${(r.decision?.matches || []).map(m=>escapeHtml(m.group)+' · '+Number(m.distinct_coins)+' coins · '+(m.loss_rate_pct == null ? 'no loss-rate sample':Number(m.loss_rate_pct).toFixed(1)+'% losses')+' · '+Number(m.severe_losses)+' severe losses').join('<br>')}</span></li>`).join('');
-  return `<h3>Entry learning · ${escapeHtml(e.version || 'starting')}</h3><p>Completed positions available as evidence: ${Number(e.completed_evidence_positions || 0)}. Paper entries now wait or avoid matching loss patterns; this applies to both paper accounts independently.</p><p>A contract with a completed loss of 50% or worse gets a 24h re-entry cooldown. Similar setups are avoided only with at least 8 distinct coins, 60% losses, 2 severe losses and negative average net return. Market cap, liquidity/volume and available launch-bundle groups are evaluated from saved entry evidence. These conditions update from completed trades; unknown data does not prove a pattern. Original-strategy AI reviews also receive this evidence.</p><p>Forward entry checks: ${Number(e.recorded_screens || 0)} retained screens · ${Number(e.pending || 0)} pending · ${Number(e.missing || 0)} missing one-hour marks</p><div style="overflow-x:auto"><table><thead><tr><th>Entry decision</th><th>Observed marks</th><th>Positive marks</th><th>Mean costed 1h mark</th></tr></thead><tbody>${marks || '<tr><td colspan="4">Waiting for eligible candidates and fresh one-hour observations.</td></tr>'}</tbody></table></div><p class="muted">${escapeHtml(e.scope || 'Paper-only outcome adaptation; no automatic model-weight training.')} No improvement is assumed from this table.</p><details><summary>Recent entry decisions and evidence</summary><ul>${recent || '<li>No eligible entry screens yet.</li>'}</ul></details>`;
+  return `<h3>Entry learning · ${escapeHtml(e.version || 'starting')}</h3><p>Completed positions available as evidence: ${Number(e.completed_evidence_positions || 0)}. Paper entries now wait or avoid matching loss patterns; both accounts use the same completed-trade evidence while their strategies and balances stay separate.</p><p>A contract with a completed loss of 50% or worse gets a 24h re-entry cooldown. Similar setups are avoided only with at least 8 distinct coins, 60% losses, 2 severe losses and negative average net return. Market cap, liquidity/volume and available launch-bundle groups are evaluated from saved entry evidence. These conditions update from completed trades; unknown data does not prove a pattern. Original-strategy AI reviews also receive this evidence.</p><p>Forward entry checks: ${Number(e.recorded_screens || 0)} retained screens · ${Number(e.pending || 0)} pending · ${Number(e.missing || 0)} missing one-hour marks</p><div style="overflow-x:auto"><table><thead><tr><th>Entry decision</th><th>Observed marks</th><th>Positive marks</th><th>Mean costed 1h mark</th></tr></thead><tbody>${marks || '<tr><td colspan="4">Waiting for eligible candidates and fresh one-hour observations.</td></tr>'}</tbody></table></div><p class="muted">${escapeHtml(e.scope || 'Paper-only outcome adaptation; no automatic model-weight training.')} No improvement is assumed from this table.</p><details><summary>Recent entry decisions and evidence</summary><ul>${recent || '<li>No eligible entry screens yet.</li>'}</ul></details>`;
 }
 function evolutionView(e) {
   const g=e?.current || {}, reports=g.training_reports || {};
