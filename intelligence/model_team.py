@@ -11,7 +11,7 @@ from intelligence.darwin import ask_darwin
 STATUS={}
 _CACHE={}
 ROLES={'jev':'Real-time participation and action selection','gemini':'Narrative, sourced social/influencer evidence and continuation','darwin':'Independent opportunity and risk review','laya':'Independent opportunity and risk review','openai':'Independent opportunity and risk review'}
-FIELDS=('task','mint','symbol','timestamp','price_usd','sol_price_usd','market_cap_usd','liquidity_usd','volume_5m_usd','buys_5m','sells_5m','price_change_5m_pct','wallet_context','social_context','setup_type','paper_risk_trial','entry_learning','research','book','position','entry_evidence','current','calculated_metrics','recent_market_samples','protective_price_samples','past_completed_positions','forward_tested_exit_lesson','peer_reviews','connection_test','provider_performance')
+FIELDS=('task','mint','symbol','timestamp','price_usd','sol_price_usd','market_cap_usd','liquidity_usd','volume_5m_usd','volume_1h_usd','buys_5m','sells_5m','price_change_5m_pct','wallet_context','social_context','setup_type','paper_risk_trial','entry_learning','research','book','position','entry_evidence','current','calculated_metrics','recent_market_samples','protective_price_samples','past_completed_positions','forward_tested_exit_lesson','peer_reviews','connection_test','provider_performance')
 def compact(state):
     def clean(v,depth=0):
         if depth>7:return 'omitted: depth limit'
