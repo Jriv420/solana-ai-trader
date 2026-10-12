@@ -27,7 +27,7 @@ def compact(state):
         if key in result:result.pop(key);omitted.append(key)
     if len(json.dumps(result,allow_nan=False).encode())>10500:
         research=result.get('research') or {}
-        result['research']={k:research[k] for k in ('security','bundle','features','narrative_rotation','activity') if k in research}
+        result['research']={k:research[k] for k in ('security','bundle','features','narrative_rotation','activity','personal_wallet_study') if k in research}
         omitted.append('verbose research excerpts')
     if len(json.dumps(result,allow_nan=False).encode())>10500:
         result['research']={'security':(result.get('research') or {}).get('security'),'features':(result.get('research') or {}).get('features')};omitted.append('additional research details')
