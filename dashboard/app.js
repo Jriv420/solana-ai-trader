@@ -223,7 +223,7 @@ function render() {
   else if (currentPage==='history') html += tradeCards(selectedAccount().trades);
   document.getElementById('content').innerHTML = html;
 }
-document.querySelectorAll('nav button').forEach(button => button.addEventListener('click',()=>{currentPage=button.dataset.v;selectedMint=null;tokenSort='default';render();}));
+document.querySelectorAll('nav button').forEach(button => button.addEventListener('click',()=>{currentPage=button.dataset.v;selectedMint=null;tokenSort='default';document.querySelector('.nav-more')?.removeAttribute('open');render();}));
 document.getElementById('content').addEventListener('click',async event=>{
   const copyButton=event.target.closest('button[data-copy-ca]');
   if(copyButton) {
