@@ -36,3 +36,13 @@ class DarwinCompute(unittest.IsolatedAsyncioTestCase):
             from datetime import datetime,timezone
             self.assertEqual(db.store.ai_request_count('darwin_http',datetime.now(timezone.utc).date().isoformat()),1)
             self.assertEqual(requests[0].headers['authorization'],'Bearer test-private-key');self.assertIn('messages',json.loads(requests[0].content))
+
+    async def test_timeout_backs_off_without_more_network_attempts(self):
+        original=httpx.AsyncClient;requests=[]
+        def handler(request):
+            requests.append(request);raise httpx.ReadTimeout('upstream timeout',request=request)
+        with patch.object(darwin,'settings',replace(settings,darwin_api_key='test',darwin_endpoint='https://test/v1/chat/completions')),patch.object(darwin,'_blocked_until',0),patch.object(darwin,'_semaphore',asyncio.Semaphore(1)),patch.object(darwin.httpx,'AsyncClient',side_effect=lambda **kw:original(transport=httpx.MockTransport(handler),trust_env=False,**kw)):
+            with self.assertRaises(darwin.ReviewPaused) as e:await darwin.ask_darwin('test',{})
+            self.assertEqual(e.exception.status,'darwin_timeout')
+            with self.assertRaises(darwin.ReviewPaused):await darwin.ask_darwin('test',{})
+            self.assertEqual(len(requests),1)

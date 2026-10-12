@@ -49,8 +49,12 @@ async def ask_darwin(prompt,data):
         # Count only actual outbound attempts. The former team counter included
         # cooldown checks; retain it as historical review-attempt data.
         if not store.reserve_ai_request('darwin_http',day,30):raise ReviewPaused('daily_team_limit_reached')
-        async with httpx.AsyncClient(timeout=max(1,settings.darwin_timeout_ms/1000)) as client:
-            response=await client.post(settings.darwin_endpoint,json=body,headers={'Authorization':'Bearer '+settings.darwin_api_key})
+        try:
+            async with httpx.AsyncClient(timeout=max(1,settings.darwin_timeout_ms/1000)) as client:
+                response=await client.post(settings.darwin_endpoint,json=body,headers={'Authorization':'Bearer '+settings.darwin_api_key})
+        except httpx.TimeoutException:
+            _blocked_until=time.time()+120
+            raise ReviewPaused('darwin_timeout')
         if response.status_code==402:
             _blocked_until=time.time()+3600;raise ReviewPaused('darwin_credits_required')
         if response.status_code in (401,403):
