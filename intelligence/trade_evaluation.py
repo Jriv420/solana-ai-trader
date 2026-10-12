@@ -124,3 +124,16 @@ def summary(book):
     return {'provider_performance':provider_performance(book,items),'metrics': metrics(items), 'recent_positions': items[-12:][::-1],
             'recorded_decisions': {x['kind']: x['n'] for x in rows},
             'scope': 'Decision records are a dataset for evaluation; neither JEV nor Gemini weights are automatically trained.'}
+
+
+def shared_lessons(limit=8,now=None):
+    now=time.time() if now is None else now
+    items=[p for book in ('trades','shadow_trades') for p in positions(book) if p['complete'] and p['costed'] and p['exit_time']<now and p['entry_time']>=now-30*86400]
+    seen=set();out=[]
+    for p in sorted(items,key=lambda x:x['exit_time'],reverse=True):
+        if p['mint'] in seen:continue
+        seen.add(p['mint'])
+        from intelligence.exit_learning import review
+        out.append(dict({k:p[k] for k in ('book','root_id','mint','entry_time','exit_time','net_pnl_sol','return_pct','exit_reason','features')},after_exit_review=review(p['book'],p['root_id'])))
+        if len(out)>=limit:break
+    return {'positions':out,'scope':'Shared completed costed outcomes from both paper accounts, one latest case per coin, preceding this decision. Account source is retained; different policies can explain different outcomes. No weight training or assumed improvement.'}

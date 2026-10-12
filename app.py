@@ -44,6 +44,8 @@ from execution.router import choose_route
 
 STATE={"opportunities":[],"agents":{"jev":"standby","laya":"standby","darwin":"standby","wallet_ai":"active","social_ai":"active","risk_ai":"active"}}
 async def analyze(t):
+    from paper.accounts import enabled
+    account_enabled=enabled("trades")
     rules=trading_settings()
     social_evidence=await get_social_snapshot(t['mint'])
     t=dict(t,social_context=social_evidence)
@@ -64,7 +66,7 @@ async def analyze(t):
     # Bound exploratory reviews to one per minute; normal qualified reviews keep their existing limits.
     explore=discretionary and time.time()-STATE.get('last_exception_review',0)>=60
     if explore:STATE['last_exception_review']=time.time()
-    fast=await evaluate_fast(dict(t,book='trades')) if w['score']>=rules.min_wallet_score or explore else dict(_fallback(t),reason='Awaiting qualified wallet evidence before paid AI escalation')
+    fast=await evaluate_fast(dict(t,book='trades')) if account_enabled and (w['score']>=rules.min_wallet_score or explore) else dict(_fallback(t),reason='Awaiting qualified wallet evidence before paid AI escalation')
     STATE['agents'][fast['provider']]='active'
     STATE['agents']['wallet_ai']=w['status']
     STATE['agents']['social_ai']=social_evidence.get('status','unknown')
@@ -149,6 +151,8 @@ async def life(app):
     from data.historical_prices import loop as historical_prices_loop
     from intelligence.model_team import inventory
     logging.getLogger('uvicorn.error').info('NEXUS model team inventory %s',inventory())
+    from paper.accounts import summary as account_controls
+    logging.getLogger("uvicorn.error").info("NEXUS paper account controls %s shared_learning=both_accounts",account_controls())
     tasks=[asyncio.create_task(historical_prices_loop()),asyncio.create_task(personal_wallet_loop()),asyncio.create_task(protection_loop()),asyncio.create_task(loop()),asyncio.create_task(stream_new_tokens()),asyncio.create_task(wallet_learning_loop()),asyncio.create_task(security_loop()),asyncio.create_task(bundle_loop()),asyncio.create_task(social_loop()),asyncio.create_task(wallet_signals_loop()),asyncio.create_task(research_loop())]
     try:
         yield
@@ -181,7 +185,18 @@ async def learning_decisions(account: Literal['original','aggressive']='aggressi
     return {'records':dataset('trades' if account=='original' else 'shadow_trades',limit),'scope':'Observed outcomes are not correct-action training labels; no automatic model training. Future outcomes are separate from decision-time evidence.'}
 
 @app.get("/api/status")
-async def status():return {"learning":learning_summary(),"protection":dict(protection_status),"narrative_trends":narrative_trend_summary(),"activity_learning":activity_comparison(),"shadow":shadow_summary(),"risk_trial":risk_trial_status(),"paper_mode":settings.paper_mode,"balance_sol":paper_trader.balance_sol(),"open_positions":[p for p in store.position_history() if p["status"]=="open"],"agents":STATE["agents"],"error":STATE.get("error"),"new_pairs_feed":dict(FEED),"paper_metrics":store.paper_metrics(),"missed_learning":STATE.get("missed_learning",{}),"scan":STATE.get("scan"),"scan_started_at":STATE.get("scan_started_at")}
+async def status():
+    from paper.accounts import summary as account_controls
+    return {"account_controls":account_controls(),"learning":learning_summary(),"protection":dict(protection_status),"narrative_trends":narrative_trend_summary(),"activity_learning":activity_comparison(),"shadow":shadow_summary(),"risk_trial":risk_trial_status(),"paper_mode":settings.paper_mode,"balance_sol":paper_trader.balance_sol(),"open_positions":[p for p in store.position_history() if p["status"]=="open"],"agents":STATE["agents"],"error":STATE.get("error"),"new_pairs_feed":dict(FEED),"paper_metrics":store.paper_metrics(),"missed_learning":STATE.get("missed_learning",{}),"scan":STATE.get("scan"),"scan_started_at":STATE.get("scan_started_at")}
+class AccountControlInput(BaseModel):
+    entries_enabled: bool
+@app.post('/api/paper-accounts/{account}/control')
+async def control_account(account: Literal['original','aggressive'], payload: AccountControlInput, request: Request):
+    check_wallet_write(request)
+    if not settings.paper_mode:raise HTTPException(status_code=409,detail='Controls apply to paper accounts only')
+    from paper.accounts import set_enabled
+    return {'account_controls':set_enabled(account,payload.entries_enabled)}
+
 @app.get("/api/opportunities")
 async def opps():return STATE["opportunities"]
 @app.get("/api/trades")

@@ -24,12 +24,12 @@ class EntryLearningTests(unittest.TestCase):
         return p
     def bad_history(self):
         for i in range(8):self.completed('coin'+str(i),-80 if i<2 else -10)
-    def test_requires_distinct_completed_coins_and_uses_same_account(self):
+    def test_requires_distinct_completed_coins_and_shares_accounts(self):
         for i in range(7):self.completed('coin'+str(i),-80)
         d=learn.assess('shadow_trades',self.token,self.now);self.assertEqual(d['action'],'allow');self.assertEqual(d['matches'][0]['distinct_coins'],7)
         self.completed('coin7',-10);learn._CACHE.clear()
         d=learn.assess('shadow_trades',self.token,self.now);self.assertEqual(d['action'],'avoid')
-        self.assertEqual(learn.assess('trades',self.token,self.now)['action'],'allow')
+        self.assertEqual(learn.assess('trades',self.token,self.now)['action'],'avoid')
         self.assertEqual(d['matches'][1]['group'],'launch_bundle:20_plus')
     def test_repeated_trades_in_one_coin_are_not_eight_independent_lessons(self):
         for i in range(12):self.completed('onecoin',-80)

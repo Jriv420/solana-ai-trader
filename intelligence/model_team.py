@@ -11,7 +11,7 @@ from intelligence.darwin import ask_darwin
 STATUS={}
 _CACHE={}
 ROLES={'jev':'Real-time participation and action selection','gemini':'Narrative, sourced social/influencer evidence and continuation','darwin':'Independent opportunity and risk review','laya':'Independent opportunity and risk review','openai':'Independent opportunity and risk review'}
-FIELDS=('task','mint','symbol','timestamp','price_usd','sol_price_usd','market_cap_usd','liquidity_usd','volume_5m_usd','volume_1h_usd','buys_5m','sells_5m','price_change_5m_pct','wallet_context','social_context','setup_type','paper_risk_trial','entry_learning','research','book','position','entry_evidence','current','calculated_metrics','recent_market_samples','protective_price_samples','past_completed_positions','forward_tested_exit_lesson','peer_reviews','connection_test','provider_performance')
+FIELDS=('shared_learning','task','mint','symbol','timestamp','price_usd','sol_price_usd','market_cap_usd','liquidity_usd','volume_5m_usd','volume_1h_usd','buys_5m','sells_5m','price_change_5m_pct','wallet_context','social_context','setup_type','paper_risk_trial','entry_learning','research','book','position','entry_evidence','current','calculated_metrics','recent_market_samples','protective_price_samples','past_completed_positions','forward_tested_exit_lesson','peer_reviews','connection_test','provider_performance')
 def compact(state):
     def clean(v,depth=0):
         if depth>7:return 'omitted: depth limit'
@@ -22,7 +22,7 @@ def compact(state):
         return v
     result=clean({k:state[k] for k in FIELDS if k in state})
     omitted=[]
-    for key in ('past_completed_positions','protective_price_samples','recent_market_samples','entry_learning','forward_tested_exit_lesson'):
+    for key in ('shared_learning','past_completed_positions','protective_price_samples','recent_market_samples','entry_learning','forward_tested_exit_lesson'):
         if len(json.dumps(result,allow_nan=False).encode())<=10500:break
         if key in result:result.pop(key);omitted.append(key)
     if len(json.dumps(result,allow_nan=False).encode())>10500:
@@ -113,7 +113,8 @@ def combine(reviews,mode):
 async def entry(state):
     key=('entry_team',state.get('book'),state.get('mint'));cached=_CACHE.get(key)
     if cached and time.time()-cached[0]<30:return dict(cached[1],cached=True)
-    state=compact(dict(state,task='paper_entry'))
+    from intelligence.trade_evaluation import shared_lessons
+    state=compact(dict(state,task='paper_entry',shared_learning=shared_lessons()))
     reviews=[await review(name,state,'entry') for name in ('gemini','laya','darwin','openai')]
     jev_state=dict(state,peer_reviews=[{k:r.get(k) for k in ('provider','status','score','reason')} for r in reviews])
     reviews.append(await review('jev',jev_state,'entry'))
@@ -126,6 +127,8 @@ async def entry(state):
     return result
 
 async def exit_reviews(state,jev_call=None,gemini_call=None):
+    from intelligence.trade_evaluation import shared_lessons
+    state=compact(dict(state,shared_learning=shared_lessons()))
     reviews=[await review(name,state,'exit',gemini_call if name=='gemini' else None) for name in ('gemini','laya','darwin','openai')]
     supplied=dict(state,peer_reviews=[{k:r.get(k) for k in ('provider','status','action','score','reason')} for r in reviews])
     reviews.append(await review('jev',supplied,'exit',jev_call))

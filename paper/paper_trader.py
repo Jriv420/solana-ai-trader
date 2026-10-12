@@ -8,7 +8,8 @@ class PaperTrader:
     def open_positions(self):return self.store.open()
     def balance_sol(self):return settings.paper_starting_sol+self.store.realized()-sum(float(p["amount_sol"]) for p in self.open_positions())
     def buy(self,t,a,c):
-        if exit_requested(t):return None
+        from paper.accounts import enabled
+        if not enabled(self.store.trade_table) or exit_requested(t):return None
         price=float(t.get('price_usd') or 0);sol_usd=float(t.get('sol_price_usd') or 0)
         if not 0<=time.time()-float(t.get('timestamp') or 0)<=120:return None
         if not all(math.isfinite(x) and x>0 for x in (price,sol_usd,a)) or a>self.balance_sol():return None
