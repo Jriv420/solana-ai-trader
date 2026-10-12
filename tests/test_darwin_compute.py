@@ -1,10 +1,15 @@
-import asyncio,json,unittest
+import asyncio,json,unittest,tempfile
+from pathlib import Path
+import database.store as db
 from dataclasses import replace
 from unittest.mock import patch
 import httpx
 from config.settings import settings
 from intelligence import darwin
 class DarwinCompute(unittest.IsolatedAsyncioTestCase):
+    def setUp(self):
+        self.tmp=tempfile.TemporaryDirectory();self.db=patch.object(db,'DB',Path(self.tmp.name)/'db');self.db.start()
+    def tearDown(self):self.db.stop();self.tmp.cleanup()
     def response(self,answer=None,**extra):
         return dict({'model':'reported-model','choices':[{'finish_reason':'stop','message':{'content':json.dumps(answer or {'score':70,'action':'sell_10','reason':'Profit protection'})}}]},**extra)
     def test_native_payload_and_routed_identity(self):
@@ -28,4 +33,6 @@ class DarwinCompute(unittest.IsolatedAsyncioTestCase):
             self.assertEqual(e.exception.status,'darwin_credits_required')
             with self.assertRaises(darwin.ReviewPaused) as e:await darwin.ask_darwin('test',{})
             self.assertEqual(e.exception.status,'cooldown');self.assertEqual(len(requests),1)
+            from datetime import datetime,timezone
+            self.assertEqual(db.store.ai_request_count('darwin_http',datetime.now(timezone.utc).date().isoformat()),1)
             self.assertEqual(requests[0].headers['authorization'],'Bearer test-private-key');self.assertIn('messages',json.loads(requests[0].content))

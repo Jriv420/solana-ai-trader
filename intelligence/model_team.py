@@ -63,7 +63,7 @@ async def review(name,state,mode,call=None):
     now=time.time();cached=_CACHE.get(key);ttl=120 if mode=='exit' else (30 if name=='jev' else 900)
     if cached and now-cached[0]<ttl:return dict(cached[1],cached=True)
     try:
-        if name in ('laya','darwin'):
+        if name=='laya':
             day=datetime.now(timezone.utc).date().isoformat()
             if not store.reserve_ai_request(name+'_team',day,30):raise ReviewPaused('daily_team_limit_reached')
         if name=='jev' and mode=='exit':
