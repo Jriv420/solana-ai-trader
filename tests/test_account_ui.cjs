@@ -68,3 +68,10 @@ assert(html.includes('$260K'));
 assert(html.includes('-0.0024 SOL'));
 assert(html.includes('25% of remainder'));
 `,context);
+
+vm.runInContext(`
+const capFixture={id:9,symbol:'TEST',mint:'test',status:'closed',entry_market_cap_usd:10000,exit_market_cap_usd:15000,amount_sol:.1,position_history:{original_amount_sol:.1,remaining_amount_sol:0,realized_net_pnl_sol:.05,return_pct:50,average_entry_market_cap_usd:10000,average_sell_market_cap_usd:15000,fills:[]},current_market:{market_cap_usd:22000,timestamp:Date.now()/1000,cap_is_fdv:false}};
+let caps=tradeCards([capFixture]);assert(caps.includes('CURRENT MC'));assert(caps.includes('$22K'));assert(!caps.includes('ENTRY MARKET CAP'));assert(!caps.includes('Entry market cap:'));assert(caps.includes('AVG ENTRY'));assert(caps.includes('Full trade history'));
+capFixture.current_market.timestamp-=500;caps=tradeCards([capFixture]);assert(caps.includes('LAST OBSERVED MC'));assert(caps.includes('Stale snapshot'));
+capFixture.current_market=null;caps=tradeCards([capFixture]);assert(caps.includes('No current market snapshot available'));assert(!caps.includes('$22K'));
+`,context);

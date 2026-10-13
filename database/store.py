@@ -141,12 +141,21 @@ class Store:
             if not roots:return []
             ids=[r['id'] for r in roots]
             children=c.execute(f"SELECT * FROM {self.trade_table} WHERE json_extract(COALESCE(context_json,'{{}}'),'$.partial_exit.parent_trade_id') IN ({','.join('?' for _ in ids)})",ids).fetchall()
+            markets={}
+            if c.execute("SELECT 1 FROM sqlite_master WHERE type='table' AND name='watched'").fetchone():
+                mints=list({r['mint'] for r in roots})
+                observed=c.execute(f"SELECT mint,latest_json FROM watched WHERE mint IN ({','.join('?' for _ in mints)})",mints).fetchall()
+                for row in observed:
+                    token=(json.loads(row['latest_json']) or {}).get('token') or {}
+                    cap=valid_cap(token.get('market_cap_usd'));stamp=valid_cap(token.get('timestamp'))
+                    if cap and stamp:markets[row['mint']]={'market_cap_usd':cap,'cap_is_fdv':bool(token.get('market_cap_is_fdv')),'timestamp':stamp,'source':'Latest scanned market snapshot'}
         groups={i:[] for i in ids}
         for r in children:
             child=self.row(r);groups[child['partial_exit']['parent_trade_id']].append(child)
         result=[];previous={}
         for raw in reversed(roots):
             root=self.row(raw);legs=groups[root['id']]+[root]
+            root['current_market']=markets.get(root['mint'])
             amount=sum(float(x['amount_sol']) for x in legs)
             realized=sum(float(x['pnl_sol'] or 0) for x in legs if x['status']=='closed')
             fields=('id','amount_sol','exit_time','exit_market_cap_usd','exit_cap_is_fdv','pnl_sol','pnl_pct','exit_reason','exit_decision','execution_audit')
