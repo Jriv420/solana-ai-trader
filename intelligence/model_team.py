@@ -1,5 +1,6 @@
 """Bounded independent model reviews, explicit aggregation and audit records."""
 import json,math,time,logging
+import httpx
 from datetime import datetime,timezone
 from config.settings import settings
 from database.store import store
@@ -81,7 +82,9 @@ async def review(name,state,mode,call=None):
         result=normalized(name,response,mode,supplied)
         _CACHE[key]=(time.time(),result)
         if len(_CACHE)>1000:_CACHE.pop(min(_CACHE,key=lambda k:_CACHE[k][0]))
-    except Exception as exc:result={'provider':name,'role':ROLES[name],'status':getattr(exc,'status',type(exc).__name__),'checked_at':time.time()}
+    except Exception as exc:
+        failure='http_'+str(exc.response.status_code) if isinstance(exc,httpx.HTTPStatusError) else getattr(exc,'status',type(exc).__name__)
+        result={'provider':name,'role':ROLES[name],'status':failure,'checked_at':time.time()}
     STATUS[name]={'status':result['status'],'checked_at':result['checked_at'],'task':mode,'cached':result.get('cached',False),'actual_model':result.get('actual_model'),'routing_rung':result.get('routing_rung')}
     logging.getLogger('uvicorn.error').info('NEXUS model team provider=%s task=%s status=%s action=%s score=%s routed_model=%s',name,mode,result['status'],result.get('action'),result.get('score'),result.get('actual_model'))
     return result
