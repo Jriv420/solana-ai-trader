@@ -103,8 +103,12 @@ def step(observations,process_exits=True):
                 continue
             t=dict(t,entry_learning=learning)
             team=t.get('entry_team')
-            if t.get('team_required') and not team:
-                blockers['awaiting model team review']+=1;continue
+            if t.get('team_required'):
+                if not team or team.get('provider')!='model-team':
+                    blockers['no valid AI entry review; fallback buys disabled']+=1;continue
+                final=(team.get('team') or {}).get('final') or {}
+                if not final.get('contributors'):
+                    blockers['no verified model contributors']+=1;continue
             if team and team['provider']=='model-team' and team['score']<50:
                 blockers['model team entry evidence below 50']+=1;continue
             # Momentum strength controls simulated size; this is not an AI confidence score.

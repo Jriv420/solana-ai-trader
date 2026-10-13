@@ -52,7 +52,7 @@ class ModelTeam(unittest.IsolatedAsyncioTestCase):
         mint='EQ46GCkgPctvueFDt2edutfa1hKxsDzo2EZeSMiHpump'
         t={'mint':mint,'symbol':'T','timestamp':time.time(),'price_usd':1,'sol_price_usd':100,'market_cap_usd':12600,'liquidity_usd':10000,'volume_5m_usd':5000,'price_change_5m_pct':10,'buys_5m':50,'sells_5m':10,'research':{'security':{'status':'ok','danger':False}}}
         obs=[{'token':t}]
-        with patch.object(shadow,'BOOK',self.book),patch.object(shadow,'TRADER',PaperTrader(self.book)),patch.object(shadow,'initialize',return_value={'started_at':time.time()-1,'ends_at':time.time()+1000}),patch.object(team,'entry',AsyncMock(return_value={'provider':'model-team','score':40,'team':{'reviews':[],'final':{'action':'hold'}}})) as call:
+        with patch.object(shadow,'BOOK',self.book),patch.object(shadow,'TRADER',PaperTrader(self.book)),patch.object(shadow,'initialize',return_value={'started_at':time.time()-1,'ends_at':time.time()+1000}),patch.object(team,'entry',AsyncMock(return_value={'provider':'model-team','score':40,'team':{'reviews':[],'final':{'action':'hold','contributors':['jev']}}})) as call:
             await shadow.prepare_entries(obs);d=shadow.step(obs,process_exits=False)
             self.assertEqual(d['paper_buys'],0);call.assert_awaited_once();self.assertIn('model team entry evidence below 50',d['blockers'])
             self.assertEqual(call.call_args.args[0]['book'],'shadow_trades')
@@ -76,3 +76,21 @@ class ModelTeam(unittest.IsolatedAsyncioTestCase):
     async def test_disabled_and_key_without_endpoint_are_never_called(self):
         with patch.object(team,'settings',replace(self.cfg,darwin_endpoint='')),patch.object(team,'ask_darwin',AsyncMock()) as call:
             r=await team.review('darwin',{},'entry');self.assertEqual(r['status'],'not_configured');call.assert_not_awaited()
+
+    async def test_aggressive_all_models_unavailable_cannot_buy_via_fallback(self):
+        from paper import shadow
+        token={'mint':'EQ46GCkgPctvueFDt2edutfa1hKxsDzo2EZeSMiHpump','symbol':'T','timestamp':time.time(),'price_usd':1,'sol_price_usd':100,'liquidity_usd':10000,'volume_5m_usd':5000,'price_change_5m_pct':25,'buys_5m':50,'sells_5m':10,'research':{'security':{'status':'ok','danger':False}}}
+        observations=[{'token':token}]
+        with patch.object(shadow,'BOOK',self.book),patch.object(shadow,'TRADER',PaperTrader(self.book)),patch.object(shadow,'initialize',return_value={'ends_at':time.time()+1000}),patch.object(team,'entry',AsyncMock(return_value={'provider':'deterministic-fallback','score':90,'team':{'final':{'contributors':[]}}})):
+            await shadow.prepare_entries(observations)
+            result=shadow.step(observations,process_exits=False)
+        self.assertEqual(result['paper_buys'],0);self.assertFalse(self.book.open())
+        self.assertIn('no valid AI entry review; fallback buys disabled',result['blockers'])
+    async def test_http_failure_code_is_visible_without_credentials(self):
+        import httpx
+        request=httpx.Request('POST','https://test.example',headers={'Authorization':'Bearer private'})
+        response=httpx.Response(401,request=request)
+        failure=httpx.HTTPStatusError('private',request=request,response=response)
+        with patch.object(team,'ask_jev',AsyncMock(side_effect=failure)):
+            result=await team.review('jev',{'mint':'error'},'entry')
+        self.assertEqual(result['status'],'http_401');self.assertNotIn('private',json.dumps(result))
